@@ -450,7 +450,18 @@ const Ticker = struct {
     }
 };
 
-var camera = Camera{ .translation = zm.Vec3f{ 0, 0, -3 }, .ticker = undefined };
+const InputHandler = struct {
+    cam: *Camera,
+
+    pub fn init(cam: *Camera) InputHandler {
+        return .{ .cam = cam };
+    }
+
+    pub fn mouseCallback(self: *InputHandler, x: f64, y: f64) void {
+        self.cam.mouseCallback(x, y);
+    }
+};
+
 pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
@@ -459,12 +470,16 @@ pub fn main() !void {
     var context = try Context.init(allocator, screen_w, screen_h, true, true, true);
     defer context.destroy(allocator);
     var ticker = try Ticker.init();
-    camera.ticker = &ticker;
+    var camera = Camera{ .translation = zm.Vec3f{ 0, 0, -3 }, .ticker = &ticker };
+    var input_handler = InputHandler.init(&camera);
 
+    context.window.setUserPointer(&input_handler);
     context.window.setCursorPosCallback(struct {
         fn callback(window: glfw.Window, x: f64, y: f64) void {
-            _ = window;
-            camera.mouseCallback(x, y);
+            const user_ptr = window.getUserPointer(InputHandler);
+            if (user_ptr != null) {
+                user_ptr.?.mouseCallback(x, y);
+            }
         }
     }.callback);
     // ===================================================================================
@@ -861,6 +876,15 @@ pub fn main() !void {
     gl.PolygonMode(gl.FRONT_AND_BACK, gl.FILL);
 
 
+    // context.window.setKeyCallback(struct {
+    //     fn callback(window: glfw.Window, key: glfw.Key, scancode: i32, action: glfw.Action, mods: glfw.Mods) void {
+    //         _ = window;
+    //         if (key == .one and action == .press) {
+    //             display_skybox = !display_skybox;
+    //         }
+    //     }
+    // }.callback);
+
     // Wait for the user to close the window. This is the render loop!
     while (!context.window.shouldClose()) {
         gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); // Clear the color and z buffers
@@ -869,6 +893,7 @@ pub fn main() !void {
 
         switch (user_input) {
             .toggle_skybox => {
+                std.debug.print("toggling skybox!", .{});
             display_skybox = !display_skybox;
             },
 
