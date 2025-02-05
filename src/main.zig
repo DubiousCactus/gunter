@@ -224,15 +224,6 @@ const ShaderProgram = struct {
     }
 };
 
-const InputResult = union(enum) {
-    toggle_skybox,
-    w,
-    a,
-    s,
-    d,
-    none,
-};
-
 const Context = struct {
     window: glfw.Window,
 
@@ -294,25 +285,6 @@ const Context = struct {
         glfw.makeContextCurrent(null);
         self.window.destroy();
         glfw.terminate();
-    }
-
-    pub fn processInput(self: Context) InputResult {
-        if (self.window.getKey(.q) == .press) {
-            self.window.setShouldClose(true);
-            return .none;
-        } else if (self.window.getKey(.one) == .press) {
-            return .toggle_skybox;
-        } else if (self.window.getKey(.w) == .press) {
-            return .w;
-        } else if (self.window.getKey(.s) == .press) {
-            return .s;
-        } else if (self.window.getKey(.a) == .press) {
-            return .a;
-        } else if (self.window.getKey(.d) == .press) {
-            return .d;
-        } else {
-            return .none;
-        }
     }
 };
 
@@ -452,6 +424,7 @@ const Ticker = struct {
 
 const InputHandler = struct {
     cam: *Camera,
+    display_skybox: bool = false,
 
     pub fn init(cam: *Camera) InputHandler {
         return .{ .cam = cam };
@@ -459,6 +432,32 @@ const InputHandler = struct {
 
     pub fn mouseCallback(self: *InputHandler, x: f64, y: f64) void {
         self.cam.mouseCallback(x, y);
+    }
+
+    pub fn keyCallback(self: *InputHandler, window: glfw.Window, key: glfw.Key, scancode: i32, action: glfw.Action, mods: glfw.Mods) void {
+        _ = scancode;
+        _ = mods;
+
+        if (action == .repeat) {
+            switch (key) {
+                .w => self.cam.moveFwd(),
+                .s => self.cam.moveBck(),
+                .a => self.cam.moveLeft(),
+                .d => self.cam.moveRight(),
+                else => {},
+            }
+        } else if (action == .press) {
+            switch (key) {
+                .q => window.setShouldClose(true),
+                .one => {
+                    self.display_skybox = !self.display_skybox;
+                },
+                else => {},
+            }
+        }
+        // TODO: It would be very nice to be able to hook any functions with a given key
+        // + action, so that we can do anything from user code without touching the
+        // input handler. For this we would need a Map of .{keycode, action} -> comptime fn or something like that.
     }
 };
 
@@ -475,13 +474,21 @@ pub fn main() !void {
 
     context.window.setUserPointer(&input_handler);
     context.window.setCursorPosCallback(struct {
-        fn callback(window: glfw.Window, x: f64, y: f64) void {
+        fn anonymous_callback(window: glfw.Window, x: f64, y: f64) void {
             const user_ptr = window.getUserPointer(InputHandler);
             if (user_ptr != null) {
                 user_ptr.?.mouseCallback(x, y);
             }
         }
-    }.callback);
+    }.anonymous_callback);
+    context.window.setKeyCallback(struct {
+        fn anonymous_callback(window: glfw.Window, key: glfw.Key, scancode: i32, action: glfw.Action, mods: glfw.Mods) void {
+            const user_ptr = window.getUserPointer(InputHandler);
+            if (user_ptr != null) {
+                user_ptr.?.keyCallback(window, key, scancode, action, mods);
+            }
+        }
+    }.anonymous_callback);
     // ===================================================================================
     // ===================================== Shaders =====================================
     const light_shader_program: ShaderProgram = try ShaderProgram.init(
@@ -837,8 +844,6 @@ pub fn main() !void {
     
     // ===================================================================================
     gl.ClearColor(0.0, 0.0, 0.0, 1);
-    var user_input: InputResult = .none;
-    var display_skybox: bool = true;
     var active_shader_program: ShaderProgram = textured_shader_program;
     var model_mat: zm.Mat4f = zm.Mat4f.multiply(
         zm.Mat4f.fromQuaternion(
@@ -876,35 +881,14 @@ pub fn main() !void {
     gl.PolygonMode(gl.FRONT_AND_BACK, gl.FILL);
 
 
-    // context.window.setKeyCallback(struct {
-    //     fn callback(window: glfw.Window, key: glfw.Key, scancode: i32, action: glfw.Action, mods: glfw.Mods) void {
-    //         _ = window;
-    //         if (key == .one and action == .press) {
-    //             display_skybox = !display_skybox;
-    //         }
-    //     }
-    // }.callback);
-
     // Wait for the user to close the window. This is the render loop!
     while (!context.window.shouldClose()) {
         gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); // Clear the color and z buffers
-        user_input = context.processInput();
         ticker.tick();
 
-        switch (user_input) {
-            .toggle_skybox => {
-                std.debug.print("toggling skybox!", .{});
-            display_skybox = !display_skybox;
-            },
+        
 
-            .w => camera.moveFwd(),
-            .s => camera.moveBck(),
-            .a => camera.moveLeft(),
-            .d => camera.moveRight(),
-            .none => {},
-        }
-
-        if (!display_skybox) {
+        if (!input_handler.display_skybox) {
             light_shader_program.use();
             active_shader_program = light_shader_program;
             try active_shader_program.setBool("isSource", true);
@@ -929,7 +913,7 @@ pub fn main() !void {
             try active_shader_program.setMat4f("model", cube_transform, true,); 
             gl.DrawArrays(gl.TRIANGLES, 0, 36);
         }
-        if (display_skybox) {
+        if (input_handler.display_skybox) {
             // ================= SkyBox =====================
             gl.DepthFunc(gl.LEQUAL); // Change depth function so depth test passes when values are equal to depth buffer's content
             // gl.DepthMask(gl.FALSE); // Disable depth writing so we don't need to worry about
