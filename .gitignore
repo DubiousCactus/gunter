@@ -1,0 +1,4 @@
+.zig-cache
+textures
+zig-out
+.DS_Store

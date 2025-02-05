@@ -1,0 +1,51 @@
+.{
+    // This is the default name used by packages depending on this one. For
+    // example, when a user runs `zig fetch --save <url>`, this field is used
+    // as the key in the `dependencies` table. Although the user can choose a
+    // different name, most users will stick with this provided value.
+    //
+    // It is redundant to include "zig" in this name because it is already
+    // within the Zig package namespace.
+    .name = "learning-opengl",
+
+    // This is a [Semantic Version](https://semver.org/).
+    // In a future version of Zig it will be used for package deduplication.
+    .version = "0.0.0",
+
+    // This field is optional.
+    // This is currently advisory only; Zig does not yet do anything
+    // with this value.
+    //.minimum_zig_version = "0.11.0",
+
+    // This field is optional.
+    // Each dependency must either provide a `url` and `hash`, or a `path`.
+    // `zig build --fetch` can be used to fetch all dependencies of a package, recursively.
+    // Once all dependencies are fetched, `zig build` no longer requires
+    // internet connectivity.
+    .dependencies = .{
+        .zigglgen = .{
+            .url = "git+https://github.com/castholm/zigglgen#1c901bef6d312ef1814b8fce3c5a9e9e8e61ac2d",
+            .hash = "12209d8a018832bee15d9da29a12fa753d89b56cd843cdf1f39501546c6467e38ba1",
+        },
+        .@"mach-glfw" = .{
+            .url = "https://pkg.machengine.org/mach-glfw/affdd6ae6f2ac2c3b9162784bdad345c561eeeea.tar.gz",
+            .hash = "122022ea6df16700e521078c20d7d01f894c6f967e6c6ce1ea166426b4fc61667de3",
+        },
+        .zigimg = .{
+            .url = "https://github.com/zigimg/zigimg/archive/master.tar.gz",
+            .hash = "1220ad1b5a659cae9cf50e936b2d82778defe52f70a2f266c1afe96be809f604287a",
+        },
+        .zm = .{
+            .url = "git+https://github.com/griush/zm#50d6c83ee4bf3ae8b0ab370cfe77e700d8fdd601",
+            .hash = "12206ec8ddce3c622a8d809e1aa92d9ec2c05e88de0f85eadc98a6ed7fdad5c79b07",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        // For example...
+        //"LICENSE",
+        //"README.md",
+    },
+}
