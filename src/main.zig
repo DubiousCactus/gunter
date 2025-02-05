@@ -8,474 +8,27 @@ const glfw_log = std.log.scoped(.glfw);
 const gl_log = std.log.scoped(.gl);
 const log = std.log;
 
-fn logGLFWError(error_code: glfw.ErrorCode, description: [:0]const u8) void {
-    glfw_log.err("{}: {s}\n", .{ error_code, description });
-}
-// TODO: Comptime generic
-const Vec3 = struct {
-    x: f32,
-    y: f32,
-    z: f32,
-
-    pub fn add(self: *Vec3, other: Vec3) Vec3 {
-        self.x += other.x;
-        self.y += other.y;
-        self.z += other.z;
-        return self.*;
-    }
-};
-
-const ShaderProgram = struct {
-    // Shaders, shaders, shaders... And non-shading pipeline stages!
-    // VERTEX SHADERS (in: single vertex, out: single vertex): Take in 3D coordinates and transform them (e.g. for wind effects, or just transforming to NDC).
-    // GEOMETRY SHADERS (in: collection of vertices that form 1 primitive, out: collection
-    // of potentially different number of verticies to form new primitives): Take in the output of the vertex shader, which form a primitive
-    // (triangle, points, line, etc.) and generate new primitives.
-    // PRIMITIVE ASSEMBLY (in: all vertices of the geometry shader that form 1+ primitives,
-    // out: assembled primitives ready for rasterization): is a pipeline stage which takes as input the output of the
-    // geometry shader and assembles them into another primitive shape.
-    // VIEWPORT TRANSFORM? Somewhere here, OpenGL transforms the NDC vertices to
-    // screen-space coordinates. Or is it done after rasterization?
-    // RASTERIZATION (in: primitive shapes, out: pixels): is a pipeline stage which takes in
-    // all primitive shapes and rasterizes them into "active pixels" / fragments. It also is
-    // followed by clipping which removes all pixels that aren't visible on screen.
-    // FRAGMENT SHADER (in: empty pixels / fragments, out: coloured pixels): Put some colour into our
-    // pixels! The input is a "fragment", which is a data structure that contains everything
-    // needed to generate coloured pixels (light, shadows, etc.). <-- All fancy effects happen here my friend.
-    // TESTS AND BLENDING (in: coloured pixels, out: coloured pixels): This last stage
-    // checks the depth of the fragment to do occlusion testing and alpha blending.
-    // + TESSELLATION AND TRASNFORM FEEDBACK LOOP??? (will see later)
-    // /!\ There are no default vertex and fragment shaders! We *need* to define those.
-    // IMPORTANT: The pipeline only works on Normalized Device Coordinates! So we, the user,
-    // need to take care of transforming our world vertices to NDC vertices (perspective
-    // transform, etc.). But this is typically done in the vertex shader actually.
-    //
-    //
-    id: c_uint,
-
-    pub fn init(
-        allocator: std.mem.Allocator,
-        vert_shader_pth: []const u8,
-        frag_shader_pth: []const u8,
-    ) !ShaderProgram {
-        const cwd = std.fs.cwd();
-
-        // ================ Vertex shader ====================
-        var file = cwd.openFile(vert_shader_pth, .{}) catch |err| {
-            log.err("failed to open vertex shader: {?s}", .{vert_shader_pth});
-            return err;
-        };
-        // Ensure null termination (add a null byte at the end of the slice) by setting
-        // the sentinel with readToEndAllocOptions.
-        var shader_src: []u8 = file.readToEndAllocOptions(
-            allocator,
-            1024,
-            null,
-            @alignOf(u8),
-            0,
-        ) catch |err| {
-            log.err("failed to read vertex shader: {?s}", .{vert_shader_pth});
-            return err;
-        };
-        defer allocator.free(shader_src);
-        // Now let's create our vertex shader object:
-        const vertex_shader: c_uint = gl.CreateShader(gl.VERTEX_SHADER);
-        // Next, attach the shader code to the shader object and compile it:
-        // Note that we can compile one shader from multiple sources, but here we do just 1.
-        // We first convert the slice to a many-item pointer:
-        const shader_src_ptr: [*]const u8 = shader_src.ptr; // The cast to const is implicit.
-        // Then, we take a pointer to that many-item pointer with &shader_src_ptr, and
-        // we wrap it in a slice to take a many-item pointer to the first item.
-        // const container: [*]const [*]const u8 = (&shader_src_ptr)[0..1];
-        // A cleaner approach, casting a pointer to the many-item pointer (ie *[*]const
-        // u8), to a many-item pointer to many-item pointers:
-        const container: [*]const [*]const u8 = @ptrCast(&shader_src_ptr);
-        gl.ShaderSource(vertex_shader, 1, container, null);
-        gl.CompileShader(vertex_shader);
-        var success: c_int = undefined;
-        var info_log: [512:0]u8 = undefined;
-        gl.GetShaderiv(vertex_shader, gl.COMPILE_STATUS, &success);
-        if (success != gl.TRUE) {
-            gl.GetShaderInfoLog(vertex_shader, info_log.len, null, &info_log);
-            gl_log.err(
-                "failed to compile vertex shader: {?s}",
-                .{std.mem.sliceTo(&info_log, 0)},
-            );
-            return error.CompileShaderFailed;
-        }
-        // ===================================================
-        // ================ Fragment shader ==================
-        file.close();
-        file = cwd.openFile(frag_shader_pth, .{}) catch |err| {
-            log.err("failed to open fragment shader: {?s}", .{frag_shader_pth});
-            return err;
-        };
-        defer file.close();
-        shader_src = file.readToEndAllocOptions(
-            allocator,
-            1024,
-            null,
-            @alignOf(u8),
-            0,
-        ) catch |err| {
-            log.err("failed to read fragment shader: {?s}", .{frag_shader_pth});
-            return err;
-        };
-        defer allocator.free(shader_src);
-        // Now let's create our vertex shader object:
-        const frag_shader: c_uint = gl.CreateShader(gl.FRAGMENT_SHADER);
-        // Next, attach the shader code to the shader object and compile it:
-        // Note that we can compile one shader from multiple sources, but here we do just 1.
-        gl.ShaderSource(frag_shader, 1, @ptrCast(&shader_src.ptr), null);
-        gl.CompileShader(frag_shader);
-        success = undefined;
-        info_log = undefined;
-        gl.GetShaderiv(frag_shader, gl.COMPILE_STATUS, &success);
-        if (success != gl.TRUE) {
-            gl.GetShaderInfoLog(frag_shader, info_log.len, null, &info_log);
-            gl_log.err("failed to compile vertex shader: {?s}", .{std.mem.sliceTo(
-                &info_log,
-                0,
-            )});
-            return error.CompileShaderFailed;
-        }
-
-        // Now that we compile both shader objects, we need to build the shader program.
-        // It's a linked version of multiple shaders combined. When we render something, we
-        // then activate this shader program and it'll be used for render calls.
-        // Building this program allows to link the inputs and outputs together, to create
-        // the chain of shaders that fits in the pipeline. Neat :)
-        const shader_program: c_uint = gl.CreateProgram();
-        if (shader_program == 0) return error.CreateProgramFailed;
-        errdefer gl.DeleteProgram(shader_program);
-
-        gl.AttachShader(shader_program, vertex_shader);
-        gl.AttachShader(shader_program, frag_shader);
-        gl.LinkProgram(shader_program);
-        success = undefined;
-        gl.GetProgramiv(shader_program, gl.LINK_STATUS, &success);
-        if (success != gl.TRUE) {
-            info_log = undefined;
-            gl.GetProgramInfoLog(shader_program, info_log.len, null, &info_log);
-            gl_log.err("failed to compile fragment shader: {?s}", .{std.mem.sliceTo(
-                &info_log,
-                0,
-            )});
-            return error.CompileShaderFailed;
-        }
-        // We don't need the shader objects anymore:
-        gl.DeleteShader(frag_shader);
-        gl.DeleteShader(vertex_shader);
-        return ShaderProgram{ .id = shader_program };
-    }
-
-    pub fn delete(self: ShaderProgram) void {
-        gl.DeleteProgram(self.id);
-    }
-
-    pub fn use(self: ShaderProgram) void {
-        gl.UseProgram(self.id);
-    }
-
-    // TODO: Use comptime to implement a generic set()
-    pub fn setBool(self: ShaderProgram, name: [*:0]const u8, value: bool) !void {
-        const loc = gl.GetUniformLocation(self.id, name);
-        if (loc == -1) {
-            gl_log.err("failed to find uniform: {?s}", .{name});
-            return error.GetUniformLocationFailed;
-        }
-        gl.Uniform1ui(loc, @as(c_uint, @intFromBool(value)));
-    }
-
-    pub fn setInt(self: ShaderProgram, name: [*:0]const u8, value: i32) !void {
-        const loc = gl.GetUniformLocation(self.id, name);
-        if (loc == -1) {
-            gl_log.err("failed to find uniform: {?s}", .{name});
-            return error.GetUniformLocationFailed;
-        }
-        gl.Uniform1i(loc, value);
-    }
-
-    pub fn setFloat(self: ShaderProgram, name: [*:0]const u8, value: f32) !void {
-        const loc = gl.GetUniformLocation(self.id, name);
-        if (loc == -1) {
-            gl_log.err("failed to find uniform: {?s}", .{name});
-            return error.GetUniformLocationFailed;
-        }
-        gl.Uniform1f(loc, value);
-    }
-
-    pub fn setVec3f(self: ShaderProgram, name: [*:0]const u8, value: zm.Vec3f) !void {
-        const loc = gl.GetUniformLocation(self.id, name);
-        if (loc == -1) {
-            gl_log.err("failed to find uniform: {?s}", .{name});
-            return error.GetUniformLocationFailed;
-        }
-        gl.Uniform3f(loc, value[0], value[1], value[2]);
-    }
-
-    pub fn setMat4f(self: ShaderProgram, name: [*:0]const u8, value: zm.Mat4f, transpose: bool) !void {
-        const loc = gl.GetUniformLocation(self.id, name);
-        if (loc == -1) {
-            gl_log.err("failed to find uniform: {?s}", .{name});
-            return error.GetUniformLocationFailed;
-        }
-        gl.UniformMatrix4fv(loc, 1, @intFromBool(transpose), @ptrCast(&(value)));
-    }
-};
-
-const Context = struct {
-    window: glfw.Window,
-
-    /// Procedure table that will hold loaded OpenGL functions.
-    gl_procs: *gl.ProcTable,
-
-    pub fn init(
-        allocator: std.mem.Allocator,
-        width: u16,
-        height: u16,
-        enable_vsync: bool,
-        enable_depth_testing: bool,
-        grab_mouse: bool,
-    ) !Context {
-        // Create an OpenGL context using a windowing system of your choice.
-        glfw.setErrorCallback(logGLFWError);
-        if (!glfw.init(.{})) {
-            glfw_log.err("failed to initialize GLFW: {?s}", .{glfw.getErrorString()});
-            return error.GLFWInitFailed;
-        }
-
-        const window = glfw.Window.create(width, height, "OpenGL", null, null, .{
-            .context_version_major = gl.info.version_major,
-            .context_version_minor = gl.info.version_minor,
-            .opengl_profile = .opengl_core_profile,
-            .opengl_forward_compat = true,
-        }) orelse {
-            glfw_log.err("failed to create GLFW window: {?s}", .{glfw.getErrorString()});
-            return error.CreateWindowFailed;
-        };
-        // Make the window's context current
-        glfw.makeContextCurrent(window);
-        if (enable_vsync) glfw.swapInterval(1);
-
-        // Initialize the procedure table. This is a table where all OpenGL function
-        // implementations are stored, because the implementations vary between drivers.
-        const gl_procs = try allocator.create(gl.ProcTable);
-        errdefer allocator.destroy(gl_procs); // Cleanup if anything below fails
-        if (!gl_procs.init(glfw.getProcAddress)) {
-            gl_log.err("failed to initialize OpenGL procedure table", .{});
-            return error.GLInitFailed;
-        }
-
-        // Make the procedure table current on the calling thread.
-        gl.makeProcTableCurrent(gl_procs);
-
-        if (enable_depth_testing) gl.Enable(gl.DEPTH_TEST);
-        if (grab_mouse) window.setInputModeCursor(.disabled);
-
-        return Context{
-            .window = window,
-            .gl_procs = gl_procs,
-        };
-    }
-
-    pub fn destroy(self: Context, allocator: std.mem.Allocator) void {
-        allocator.destroy(self.gl_procs);
-        gl.makeProcTableCurrent(null);
-        glfw.makeContextCurrent(null);
-        self.window.destroy();
-        glfw.terminate();
-    }
-};
+const core = @import("core.zig");
+const scene = @import("scene.zig");
 
 const screen_w = 1920;
 const screen_h = 1080;
-
-const Camera = struct {
-    translation: zm.Vec3f,
-    pitch_yaw_speed: f32 = 0.1,
-    yaw: f32 = -90.0,
-    pitch: f32 = 0.0,
-    last_mouse_x: f64 = 0,
-    last_mouse_y: f64 = 0,
-    first_mouse_enter: bool = true,
-    up: zm.Vec3f = -zm.vec.up(f32),
-    front: zm.Vec3f = zm.vec.forward(f32),
-    strife_speed: f32 = 25,
-    ticker: *Ticker,
-
-    pub fn init(ticker: *Ticker, translation: ?zm.Vec3f) Camera {
-        return Camera{
-            .ticker = ticker,
-            .translation = translation orelse zm.vec.zero(3, f32),
-        };
-    }
-
-    pub fn mouseCallback(self: *Camera, x: f64, y: f64) void {
-        if (self.first_mouse_enter) {
-            self.last_mouse_x = x;
-            self.last_mouse_y = y;
-            self.first_mouse_enter = false;
-        }
-        self.yaw = std.math.clamp(
-            self.yaw + self.pitch_yaw_speed * @as(f32, @floatCast(self.last_mouse_x - x)),
-            -180.0,
-            180.0,
-        );
-        self.pitch = std.math.clamp(
-            self.pitch + self.pitch_yaw_speed * @as(f32, @floatCast(y - self.last_mouse_y)),
-            -180.0,
-            180.0,
-        );
-        self.last_mouse_x = x;
-        self.last_mouse_y = y;
-    }
-
-    pub fn moveFwd(self: *Camera) void {
-        self.translation += zm.vec.scale(
-            self.front,
-            self.strife_speed * @as(f32, @floatCast(
-                self.ticker.deltaSeconds(),
-            )),
-        );
-    }
-
-    pub fn moveBck(self: *Camera) void {
-        self.translation -= zm.vec.scale(
-            self.front,
-            self.strife_speed * @as(f32, @floatCast(
-                self.ticker.deltaSeconds(),
-            )),
-        );
-    }
-
-    pub fn moveLeft(self: *Camera) void {
-        self.translation -= zm.vec.scale(
-            zm.vec.normalize(zm.vec.cross(self.front, self.up)),
-            self.strife_speed * @as(f32, @floatCast(
-                self.ticker.deltaSeconds(),
-            )),
-        );
-    }
-
-    pub fn moveRight(self: *Camera) void {
-        self.translation += zm.vec.scale(
-            zm.vec.normalize(zm.vec.cross(self.front, self.up)),
-            self.strife_speed * @as(f32, @floatCast(
-                self.ticker.deltaSeconds(),
-            )),
-        );
-    }
-
-    pub fn getViewMat(self: *Camera) zm.Mat4f {
-        // This is basic trigonometry, but it's also best to look at it as a unit vector
-        // traveling around the unit circle. Except we consider 1 unit circle for the
-        // (x,z) plane controlled by the yaw angle, and 2 for the (x, y) & (y, z) planes
-        // controlled by the roll angle. Hypothenus is 1 since it's the unit vector of the
-        // unit circle.
-        // (x, z) plane: camera_front.x = cos(yaw_angle) * hypothenus
-        // (x, y) plane: camera_front.x = cos(pitch_angle) * hypothenus
-        // Combined: camera_front.x = cos(yaw) * cos(pitch).
-        self.front = zm.vec.normalize(zm.Vec3f{
-            std.math.cos(std.math.degreesToRadians(self.yaw)) * std.math.cos(std.math.degreesToRadians(self.pitch)),
-            std.math.sin(std.math.degreesToRadians(self.pitch)),
-            std.math.sin(std.math.degreesToRadians(self.yaw)) * std.math.cos(std.math.degreesToRadians(self.pitch)),
-        });
-
-        return zm.Mat4f.lookAt(self.translation, self.translation + self.front, self.up);
-    }
-
-    pub fn getSkyboxViewMat(self: *Camera) zm.Mat4f {
-        // const view_mat = self.getViewMat();
-        // return view_mat.removeTranslation();
-        const translation = self.translation;
-        self.translation = zm.vec.zero(3, f16);
-        self.up = -self.up;
-        const view_mat = self.getViewMat();
-        self.translation = translation;
-        self.up = -self.up;
-        return view_mat;
-    }
-};
-
-const Ticker = struct {
-    last_frame: u64 = 0,
-    timer: std.time.Timer,
-    frame_delta: u64,
-
-    pub fn init() !Ticker {
-        return Ticker{ .timer = try std.time.Timer.start(), .frame_delta = 0 };
-    }
-
-    pub fn tick(self: *Ticker) void {
-        const time = self.timer.read();
-        self.frame_delta = time - self.last_frame;
-        self.last_frame = time;
-    }
-
-    pub fn deltaSeconds(self: Ticker) f64 {
-        return @as(f64, @floatFromInt(self.frame_delta)) / std.time.ns_per_s;
-    }
-
-    pub fn deltaMilliSeconds(self: Ticker) f64 {
-        return @as(f64, @floatFromInt(self.frame_delta)) / std.time.ns_per_ms;
-    }
-};
-
-const InputHandler = struct {
-    cam: *Camera,
-    display_skybox: bool = false,
-
-    pub fn init(cam: *Camera) InputHandler {
-        return .{ .cam = cam };
-    }
-
-    pub fn mouseCallback(self: *InputHandler, x: f64, y: f64) void {
-        self.cam.mouseCallback(x, y);
-    }
-
-    pub fn keyCallback(self: *InputHandler, window: glfw.Window, key: glfw.Key, scancode: i32, action: glfw.Action, mods: glfw.Mods) void {
-        _ = scancode;
-        _ = mods;
-
-        if (action == .repeat) {
-            switch (key) {
-                .w => self.cam.moveFwd(),
-                .s => self.cam.moveBck(),
-                .a => self.cam.moveLeft(),
-                .d => self.cam.moveRight(),
-                else => {},
-            }
-        } else if (action == .press) {
-            switch (key) {
-                .q => window.setShouldClose(true),
-                .one => {
-                    self.display_skybox = !self.display_skybox;
-                },
-                else => {},
-            }
-        }
-        // TODO: It would be very nice to be able to hook any functions with a given key
-        // + action, so that we can do anything from user code without touching the
-        // input handler. For this we would need a Map of .{keycode, action} -> comptime fn or something like that.
-    }
-};
 
 pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
     // =========================== Initialize OpenGL + GLFW ===========================
-    var context = try Context.init(allocator, screen_w, screen_h, true, true, true);
+    var context = try core.Context.init(allocator, screen_w, screen_h, true, true, true);
     defer context.destroy(allocator);
-    var ticker = try Ticker.init();
-    var camera = Camera{ .translation = zm.Vec3f{ 0, 0, -3 }, .ticker = &ticker };
-    var input_handler = InputHandler.init(&camera);
+    var ticker = try core.Ticker.init();
+    var camera = scene.Camera{ .translation = zm.Vec3f{ 0, 0, -3 }, .ticker = &ticker };
+    var input_handler = scene.InputHandler.init(&camera);
 
     context.window.setUserPointer(&input_handler);
     context.window.setCursorPosCallback(struct {
         fn anonymous_callback(window: glfw.Window, x: f64, y: f64) void {
-            const user_ptr = window.getUserPointer(InputHandler);
+            const user_ptr = window.getUserPointer(scene.InputHandler);
             if (user_ptr != null) {
                 user_ptr.?.mouseCallback(x, y);
             }
@@ -483,7 +36,7 @@ pub fn main() !void {
     }.anonymous_callback);
     context.window.setKeyCallback(struct {
         fn anonymous_callback(window: glfw.Window, key: glfw.Key, scancode: i32, action: glfw.Action, mods: glfw.Mods) void {
-            const user_ptr = window.getUserPointer(InputHandler);
+            const user_ptr = window.getUserPointer(scene.InputHandler);
             if (user_ptr != null) {
                 user_ptr.?.keyCallback(window, key, scancode, action, mods);
             }
@@ -491,19 +44,19 @@ pub fn main() !void {
     }.anonymous_callback);
     // ===================================================================================
     // ===================================== Shaders =====================================
-    const light_shader_program: ShaderProgram = try ShaderProgram.init(
+    const light_shader_program: core.ShaderProgram = try core.ShaderProgram.init(
         allocator,
         "shaders/vertex_shader_light.glsl",
         "shaders/fragment_shader_light.glsl",
     );
     defer light_shader_program.delete();
-    const textured_shader_program: ShaderProgram = try ShaderProgram.init(
+    const textured_shader_program: core.ShaderProgram = try core.ShaderProgram.init(
         allocator,
         "shaders/vertex_shader_texture.glsl",
         "shaders/fragment_shader_texture.glsl",
     );
     defer textured_shader_program.delete();
-    const skybox_shader_program: ShaderProgram = try ShaderProgram.init(
+    const skybox_shader_program: core.ShaderProgram = try core.ShaderProgram.init(
         allocator,
         "shaders/vertex_shader_skybox.glsl",
         "shaders/fragment_shader_skybox.glsl",
@@ -844,7 +397,7 @@ pub fn main() !void {
     
     // ===================================================================================
     gl.ClearColor(0.0, 0.0, 0.0, 1);
-    var active_shader_program: ShaderProgram = textured_shader_program;
+    var active_shader_program: core.ShaderProgram = textured_shader_program;
     var model_mat: zm.Mat4f = zm.Mat4f.multiply(
         zm.Mat4f.fromQuaternion(
             zm.Quaternionf.fromAxisAngle(
@@ -885,8 +438,6 @@ pub fn main() !void {
     while (!context.window.shouldClose()) {
         gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); // Clear the color and z buffers
         ticker.tick();
-
-        
 
         if (!input_handler.display_skybox) {
             light_shader_program.use();
