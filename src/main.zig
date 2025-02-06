@@ -77,52 +77,50 @@ pub fn main() !void {
     };
 
     // Now let's define triangle vertices in NDC, but for a cube:
-    const rect_vertices = [_]gl.float{
-        // positions         texture coords
-        -0.5, -0.5, -0.5,  0.0, 0.0,
-     0.5, -0.5, -0.5,  1.0, 0.0,
-     0.5,  0.5, -0.5,  1.0, 1.0,
-     0.5,  0.5, -0.5,  1.0, 1.0,
-    -0.5,  0.5, -0.5,  0.0, 1.0,
-    -0.5, -0.5, -0.5,  0.0, 0.0,
-
-    -0.5, -0.5,  0.5,  0.0, 0.0,
-     0.5, -0.5,  0.5,  1.0, 0.0,
-     0.5,  0.5,  0.5,  1.0, 1.0,
-     0.5,  0.5,  0.5,  1.0, 1.0,
-    -0.5,  0.5,  0.5,  0.0, 1.0,
-    -0.5, -0.5,  0.5,  0.0, 0.0,
-
-    -0.5,  0.5,  0.5,  1.0, 0.0,
-    -0.5,  0.5, -0.5,  1.0, 1.0,
-    -0.5, -0.5, -0.5,  0.0, 1.0,
-    -0.5, -0.5, -0.5,  0.0, 1.0,
-    -0.5, -0.5,  0.5,  0.0, 0.0,
-    -0.5,  0.5,  0.5,  1.0, 0.0,
-
-     0.5,  0.5,  0.5,  1.0, 0.0,
-     0.5,  0.5, -0.5,  1.0, 1.0,
-     0.5, -0.5, -0.5,  0.0, 1.0,
-     0.5, -0.5, -0.5,  0.0, 1.0,
-     0.5, -0.5,  0.5,  0.0, 0.0,
-     0.5,  0.5,  0.5,  1.0, 0.0,
-
-    -0.5, -0.5, -0.5,  0.0, 1.0,
-     0.5, -0.5, -0.5,  1.0, 1.0,
-     0.5, -0.5,  0.5,  1.0, 0.0,
-     0.5, -0.5,  0.5,  1.0, 0.0,
-    -0.5, -0.5,  0.5,  0.0, 0.0,
-    -0.5, -0.5, -0.5,  0.0, 1.0,
-
-    -0.5,  0.5, -0.5,  0.0, 1.0,
-     0.5,  0.5, -0.5,  1.0, 1.0,
-     0.5,  0.5,  0.5,  1.0, 0.0,
-     0.5,  0.5,  0.5,  1.0, 0.0,
-    -0.5,  0.5,  0.5,  0.0, 0.0,
-    -0.5,  0.5, -0.5,  0.0, 1.0,
+    const cube_vertices = [_]gl.float{
+        // positions   texture coords   normal coords
+        -0.5, -0.5, -0.5,  0.0, 0.0,  0.0,  0.0, -1.0,
+         0.5, -0.5, -0.5,  1.0, 0.0,  0.0,  0.0, -1.0,
+         0.5,  0.5, -0.5,  1.0, 1.0,  0.0,  0.0, -1.0,
+         0.5,  0.5, -0.5,  1.0, 1.0,  0.0,  0.0, -1.0,
+        -0.5,  0.5, -0.5,  0.0, 1.0,  0.0,  0.0, -1.0,
+        -0.5, -0.5, -0.5,  0.0, 0.0,  0.0,  0.0, -1.0,
+                                                      
+        -0.5, -0.5,  0.5,  0.0, 0.0,  0.0,  0.0,  1.0,
+         0.5, -0.5,  0.5,  1.0, 0.0,  0.0,  0.0,  1.0,
+         0.5,  0.5,  0.5,  1.0, 1.0,  0.0,  0.0,  1.0,
+         0.5,  0.5,  0.5,  1.0, 1.0,  0.0,  0.0,  1.0,
+        -0.5,  0.5,  0.5,  0.0, 1.0,  0.0,  0.0,  1.0,
+        -0.5, -0.5,  0.5,  0.0, 0.0,  0.0,  0.0,  1.0,
+                                                      
+        -0.5,  0.5,  0.5,  1.0, 0.0, -1.0,  0.0,  0.0,
+        -0.5,  0.5, -0.5,  1.0, 1.0, -1.0,  0.0,  0.0,
+        -0.5, -0.5, -0.5,  0.0, 1.0, -1.0,  0.0,  0.0,
+        -0.5, -0.5, -0.5,  0.0, 1.0, -1.0,  0.0,  0.0,
+        -0.5, -0.5,  0.5,  0.0, 0.0, -1.0,  0.0,  0.0,
+        -0.5,  0.5,  0.5,  1.0, 0.0, -1.0,  0.0,  0.0,
+                                                      
+         0.5,  0.5,  0.5,  1.0, 0.0,  1.0,  0.0,  0.0,
+         0.5,  0.5, -0.5,  1.0, 1.0,  1.0,  0.0,  0.0,
+         0.5, -0.5, -0.5,  0.0, 1.0,  1.0,  0.0,  0.0,
+         0.5, -0.5, -0.5,  0.0, 1.0,  1.0,  0.0,  0.0,
+         0.5, -0.5,  0.5,  0.0, 0.0,  1.0,  0.0,  0.0,
+         0.5,  0.5,  0.5,  1.0, 0.0,  1.0,  0.0,  0.0,
+                                                      
+        -0.5, -0.5, -0.5,  0.0, 1.0,  0.0, -1.0,  0.0,
+         0.5, -0.5, -0.5,  1.0, 1.0,  0.0, -1.0,  0.0,
+         0.5, -0.5,  0.5,  1.0, 0.0,  0.0, -1.0,  0.0,
+         0.5, -0.5,  0.5,  1.0, 0.0,  0.0, -1.0,  0.0,
+        -0.5, -0.5,  0.5,  0.0, 0.0,  0.0, -1.0,  0.0,
+        -0.5, -0.5, -0.5,  0.0, 1.0,  0.0, -1.0,  0.0,
+                                                      
+        -0.5,  0.5, -0.5,  0.0, 1.0,  0.0,  1.0,  0.0,
+         0.5,  0.5, -0.5,  1.0, 1.0,  0.0,  1.0,  0.0,
+         0.5,  0.5,  0.5,  1.0, 0.0,  0.0,  1.0,  0.0,
+         0.5,  0.5,  0.5,  1.0, 0.0,  0.0,  1.0,  0.0,
+        -0.5,  0.5,  0.5,  0.0, 0.0,  0.0,  1.0,  0.0,
+        -0.5,  0.5, -0.5,  0.0, 1.0,  0.0,  1.0,  0.0,
     };
-
-
 
     const skybox_cube_verts = [_]gl.float{
         -1.0, 1.0, -1.0,
@@ -263,11 +261,13 @@ pub fn main() !void {
     defer gl.BindVertexArray(0);
     gl.BindBuffer(gl.ARRAY_BUFFER, cube_vbo);
     defer gl.BindBuffer(gl.ARRAY_BUFFER, 0);
-    gl.BufferData(gl.ARRAY_BUFFER, @sizeOf(gl.float) * rect_vertices.len, &rect_vertices, gl.STATIC_DRAW);
-    gl.VertexAttribPointer(index, size, type_, normalized, 5 * @sizeOf(gl.float), pos_pointer);
+    gl.BufferData(gl.ARRAY_BUFFER, @sizeOf(gl.float) * cube_vertices.len, &cube_vertices, gl.STATIC_DRAW);
+    gl.VertexAttribPointer(index, size, type_, normalized, 8 * @sizeOf(gl.float), pos_pointer);
     gl.EnableVertexAttribArray(index);
-    gl.VertexAttribPointer(1, 2, type_, normalized, 5 * @sizeOf(gl.float), 3 * @sizeOf(gl.float));
+    gl.VertexAttribPointer(1, 2, type_, normalized, 8 * @sizeOf(gl.float), 3 * @sizeOf(gl.float));
     gl.EnableVertexAttribArray(1);
+    gl.VertexAttribPointer(2, 3, type_, normalized, 8*@sizeOf(gl.float), 5 * @sizeOf(gl.float));
+    gl.EnableVertexAttribArray(2);
     // Texture unit (assign a location value for the *uniform* sampler in the shader):
     gl.ActiveTexture(gl.TEXTURE0); // This activates the texture unit.
     // Bind the texture to the active texture unit:
@@ -330,8 +330,8 @@ pub fn main() !void {
     image.deinit();
     textured_shader_program.use(); // We have to .use() the program to be able to set
     // the uniforms, as they don't exist outside this particular program!
-    try textured_shader_program.setInt("texture1", 0);
-    try textured_shader_program.setInt("texture2", 1);
+    try textured_shader_program.setInt("u_texture1", 0);
+    try textured_shader_program.setInt("u_texture2", 1);
 
     // Creating a skybox
     gl.BindVertexArray(skybox_vao);
@@ -389,10 +389,10 @@ pub fn main() !void {
 
     gl.BindVertexArray(light_cube_vao);
     defer gl.BindVertexArray(0);
-    gl.BindBuffer(gl.ARRAY_BUFFER, light_cube_vbo);
+    gl.BindBuffer(gl.ARRAY_BUFFER, light_cube_vbo); // FIXME: There's no need for a dedicaterd VBO, we can reuse the previous cube's
     defer gl.BindBuffer(gl.ARRAY_BUFFER, 0);
-    gl.BufferData(gl.ARRAY_BUFFER, @sizeOf(gl.float) * rect_vertices.len, &rect_vertices, gl.STATIC_DRAW);
-    gl.VertexAttribPointer(index, size, type_, normalized, 5 * @sizeOf(gl.float), pos_pointer);
+    gl.BufferData(gl.ARRAY_BUFFER, @sizeOf(gl.float) * cube_vertices.len, &cube_vertices, gl.STATIC_DRAW);
+    gl.VertexAttribPointer(index, size, type_, normalized, 8 * @sizeOf(gl.float), pos_pointer);
     gl.EnableVertexAttribArray(index);
     
     // ===================================================================================
@@ -442,26 +442,28 @@ pub fn main() !void {
         if (!input_handler.display_skybox) {
             light_shader_program.use();
             active_shader_program = light_shader_program;
-            try active_shader_program.setBool("isSource", true);
-            try active_shader_program.setVec3f("lightColor", zm.Vec3f{1.0, 1.0, 1.0});
-            try active_shader_program.setVec3f("objColor", zm.Vec3f{0.1, 0.6, 0.05});
-            try active_shader_program.setMat4f("view", camera.getViewMat(), true);
-            try active_shader_program.setMat4f("projection", projection_mat, true);
-            try active_shader_program.setMat4f("model", zm.Mat4f.scaling(0.3, 0.3, 0.3), true,); 
+            try active_shader_program.setBool("u_is_source", true);
+            try active_shader_program.setVec3f("u_light_color", zm.Vec3f{1.0, 1.0, 1.0});
+            try active_shader_program.setVec3f("u_obj_color", zm.Vec3f{0.1, 0.6, 0.05});
+            try active_shader_program.setMat4f("u_view", camera.getViewMat(), true);
+            try active_shader_program.setMat4f("u_proj", projection_mat, true);
+            try active_shader_program.setMat4f("u_model", zm.Mat4f.scaling(0.3, 0.3, 0.3), true,); 
+            try active_shader_program.setFloat("u_ambient_factor", 0.2);
+            try active_shader_program.setVec3f("u_light_pos", zm.Vec3f{0,0,0}); // TODO: Parameterize this and reflect in the model transform
             gl.BindVertexArray(light_cube_vao);
             gl.DrawArrays(gl.TRIANGLES, 0, 36);
-            try active_shader_program.setBool("isSource", false);
+            try active_shader_program.setBool("u_is_source", false);
         } else {
             textured_shader_program.use();
             active_shader_program = textured_shader_program;
         }
         // we need to transpose to go column-major (OpenGL) since zm is
         // row-major.
-        try active_shader_program.setMat4f("view", camera.getViewMat(), true);
-        try active_shader_program.setMat4f("projection", projection_mat, true);
+        try active_shader_program.setMat4f("u_view", camera.getViewMat(), true);
+        try active_shader_program.setMat4f("u_proj", projection_mat, true);
         gl.BindVertexArray(cube_vao);
         for (cube_transforms) |cube_transform| {
-            try active_shader_program.setMat4f("model", cube_transform, true,); 
+            try active_shader_program.setMat4f("u_model", cube_transform, true,); 
             gl.DrawArrays(gl.TRIANGLES, 0, 36);
         }
         if (input_handler.display_skybox) {
@@ -471,8 +473,8 @@ pub fn main() !void {
             // the scale of the skybox!
             skybox_shader_program.use();
             // try skybox_shader_program.setMat4f("view", camera.getSkyboxViewMat(), true);
-            try skybox_shader_program.setMat4f("view", zm.Mat4f.identity(), true);
-            try skybox_shader_program.setMat4f("projection", projection_mat, true);
+            try skybox_shader_program.setMat4f("u_view", zm.Mat4f.identity(), true);
+            try skybox_shader_program.setMat4f("u_proj", projection_mat, true);
             gl.BindVertexArray(skybox_vao);
             gl.DrawArrays(gl.TRIANGLES, 0, 36);
             // gl.DepthMask(gl.TRUE);
