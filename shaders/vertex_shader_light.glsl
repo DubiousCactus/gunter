@@ -6,6 +6,7 @@ layout (location = 2) in vec3 l_normal;
 
 out vec3 io_normal;
 out vec3 io_frag_w_pos;
+out vec3 io_cam;
 
 uniform mat4 u_view;
 uniform mat4 u_model;

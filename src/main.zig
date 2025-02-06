@@ -450,6 +450,7 @@ pub fn main() !void {
             try active_shader_program.setMat4f("u_model", zm.Mat4f.scaling(0.3, 0.3, 0.3), true,); 
             try active_shader_program.setFloat("u_ambient_factor", 0.2);
             try active_shader_program.setVec3f("u_light_pos", zm.Vec3f{0,0,0}); // TODO: Parameterize this and reflect in the model transform
+            try active_shader_program.setVec3f("u_cam_pos", camera.translation);
             gl.BindVertexArray(light_cube_vao);
             gl.DrawArrays(gl.TRIANGLES, 0, 36);
             try active_shader_program.setBool("u_is_source", false);
@@ -459,6 +460,8 @@ pub fn main() !void {
         }
         // we need to transpose to go column-major (OpenGL) since zm is
         // row-major.
+        try active_shader_program.setFloat("u_specular_factor", 0.5);
+        try active_shader_program.setFloat("u_shininess", 32);
         try active_shader_program.setMat4f("u_view", camera.getViewMat(), true);
         try active_shader_program.setMat4f("u_proj", projection_mat, true);
         gl.BindVertexArray(cube_vao);
