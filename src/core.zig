@@ -12,6 +12,20 @@ fn logGLFWError(error_code: glfw.ErrorCode, description: [:0]const u8) void {
     glfw_log.err("{}: {s}\n", .{ error_code, description });
 }
 
+pub const Material = struct {
+    ambient: zm.Vec3f,
+    diffuse: zm.Vec3f,
+    specular: zm.Vec3f,
+    shininess: gl.float,
+};
+
+pub const Light = struct {
+    position: zm.Vec3f,
+    ambient: zm.Vec3f,
+    diffuse: zm.Vec3f,
+    specular: zm.Vec3f,
+};
+
 pub const ShaderProgram = struct {
     // Shaders, shaders, shaders... And non-shading pipeline stages!
     // VERTEX SHADERS (in: single vertex, out: single vertex): Take in 3D coordinates and transform them (e.g. for wind effects, or just transforming to NDC).
@@ -56,7 +70,7 @@ pub const ShaderProgram = struct {
         // the sentinel with readToEndAllocOptions.
         var shader_src: []u8 = file.readToEndAllocOptions(
             allocator,
-            1024,
+            1024 * 1e6,
             null,
             @alignOf(u8),
             0,
@@ -100,7 +114,7 @@ pub const ShaderProgram = struct {
         defer file.close();
         shader_src = file.readToEndAllocOptions(
             allocator,
-            1024,
+            1024 * 1e6,
             null,
             @alignOf(u8),
             0,
@@ -208,6 +222,20 @@ pub const ShaderProgram = struct {
             return error.GetUniformLocationFailed;
         }
         gl.UniformMatrix4fv(loc, 1, @intFromBool(transpose), @ptrCast(&(value)));
+    }
+
+    pub fn setMaterial(self: ShaderProgram, value: Material) !void {
+        try self.setVec3f("u_material.ambient", value.ambient);
+        try self.setVec3f("u_material.diffuse", value.diffuse);
+        try self.setVec3f("u_material.specular", value.specular);
+        try self.setFloat("u_material.shininess", value.shininess);
+    }
+
+    pub fn setLight(self: ShaderProgram, value: Light) !void {
+        try self.setVec3f("u_light.position", value.position);
+        try self.setVec3f("u_light.ambient", value.ambient);
+        try self.setVec3f("u_light.diffuse", value.diffuse);
+        try self.setVec3f("u_light.specular", value.specular);
     }
 };
 
