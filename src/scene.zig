@@ -18,8 +18,8 @@ pub const Camera = struct {
     last_mouse_x: f64 = 0,
     last_mouse_y: f64 = 0,
     first_mouse_enter: bool = true,
-    up: zm.Vec3f = -zm.vec.up(f32),
-    front: zm.Vec3f = zm.vec.forward(f32),
+    up: zm.Vec3f = zm.vec.up(f32),
+    front: zm.Vec3f = -zm.vec.forward(f32),
     strife_speed: f32 = 25,
     ticker: *core.Ticker,
 
@@ -37,12 +37,12 @@ pub const Camera = struct {
             self.first_mouse_enter = false;
         }
         self.yaw = std.math.clamp(
-            self.yaw + self.pitch_yaw_speed * @as(f32, @floatCast(self.last_mouse_x - x)),
+            self.yaw + self.pitch_yaw_speed * @as(f32, @floatCast(x - self.last_mouse_x)),
             -180.0,
             180.0,
         );
         self.pitch = std.math.clamp(
-            self.pitch + self.pitch_yaw_speed * @as(f32, @floatCast(y - self.last_mouse_y)),
+            self.pitch + self.pitch_yaw_speed * @as(f32, @floatCast(self.last_mouse_y - y)),
             -180.0,
             180.0,
         );
