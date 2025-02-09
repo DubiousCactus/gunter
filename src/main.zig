@@ -457,13 +457,13 @@ pub fn main() !void {
             .no_skybox_raw => {
                 light_shader_program.use();
                 active_shader_program = light_shader_program;
-                try active_shader_program.setBool("u_is_source", true);
+                // try active_shader_program.setBool("u_is_source", true);
                 try active_shader_program.setMat4f("u_view", camera.getViewMat(), true);
                 try active_shader_program.setMat4f("u_proj", projection_mat, true);
                 try active_shader_program.setMat4f("u_model", zm.Mat4f.scaling(0.3, 0.3, 0.3), true,); 
                 try active_shader_program.setVec3f("u_cam_pos", camera.translation);
-                try active_shader_program.setLight(.{
-                    .position = zm.Vec3f{0,0,0},// TODO: Parameterize this and reflect in the model transform
+                try active_shader_program.setDirectionalLight(.{
+                    .direction = zm.Vec3f{-0.2, -1.0, -0.3},
                     .ambient = zm.Vec3f{0.2, 0.2, 0.2},
                     .diffuse = zm.Vec3f{0.5, 0.5, 0.5},
                     .specular = zm.Vec3f{1.0, 1.0, 1.0},
@@ -474,20 +474,20 @@ pub fn main() !void {
                     .specular = zm.Vec3f{0.5, 0.5, 0.05},
                     .shininess = 32,
                 });
-                gl.BindVertexArray(light_cube_vao);
-                gl.DrawArrays(gl.TRIANGLES, 0, 36);
+                // gl.BindVertexArray(light_cube_vao);
+                // gl.DrawArrays(gl.TRIANGLES, 0, 36);
                 try active_shader_program.setBool("u_is_source", false);
             },
             .no_skybox_textured => {
                 textured_shader_program.use();
                 active_shader_program = textured_shader_program;
-                try active_shader_program.setBool("u_is_source", true);
+                // try active_shader_program.setBool("u_is_source", true);
                 try active_shader_program.setMat4f("u_view", camera.getViewMat(), true);
                 try active_shader_program.setMat4f("u_proj", projection_mat, true);
                 try active_shader_program.setMat4f("u_model", zm.Mat4f.scaling(0.3, 0.3, 0.3), true,); 
                 try active_shader_program.setVec3f("u_cam_pos", camera.translation);
-                try active_shader_program.setLight(.{
-                    .position = zm.Vec3f{0,0,0},// TODO: Parameterize this and reflect in the model transform
+                try active_shader_program.setDirectionalLight(.{
+                    .direction = zm.Vec3f{-0.2, -1.0, -0.3},
                     .ambient = zm.Vec3f{0.2, 0.2, 0.2},
                     .diffuse = zm.Vec3f{0.5, 0.5, 0.5},
                     .specular = zm.Vec3f{1.0, 1.0, 1.0},
@@ -497,9 +497,9 @@ pub fn main() !void {
                     .specular_texture_index = 1,
                     .shininess = 32,
                 });
-                gl.BindVertexArray(light_cube_vao);
-                gl.DrawArrays(gl.TRIANGLES, 0, 36);
-                try active_shader_program.setBool("u_is_source", false);
+                // gl.BindVertexArray(light_cube_vao);
+                // gl.DrawArrays(gl.TRIANGLES, 0, 36);
+                // try active_shader_program.setBool("u_is_source", false);
             }
         }
 

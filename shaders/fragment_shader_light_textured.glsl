@@ -12,7 +12,8 @@ struct Material {
 };
 
 struct Light {
-  vec3 position;
+  // vec3 position;
+  vec3 direction;
   vec3 ambient;
   vec3 diffuse;
   vec3 specular;
@@ -29,7 +30,8 @@ void main() {
     o_frag_color = vec4(1.0, 1.0, 1.0, 1.0);
   } else {
     vec3 normal = normalize(io_normal);
-    vec3 light_dir = normalize(u_light.position - io_frag_w_pos);
+    // vec3 light_dir = normalize(u_light.position - io_frag_w_pos);
+    vec3 light_dir = normalize(-u_light.direction);
     vec3 view_dir = normalize(u_cam_pos - io_frag_w_pos);
 
     vec3 diffuse = max(dot(normal, light_dir), 0.0) *
