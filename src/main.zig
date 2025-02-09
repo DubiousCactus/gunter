@@ -52,8 +52,8 @@ pub fn main() !void {
     defer light_shader_program.delete();
     const textured_shader_program: core.ShaderProgram = try core.ShaderProgram.init(
         allocator,
-        "shaders/vertex_shader_texture.glsl",
-        "shaders/fragment_shader_texture.glsl",
+        "shaders/vertex_shader_light_textured.glsl",
+        "shaders/fragment_shader_light_textured.glsl",
     );
     defer textured_shader_program.delete();
     const skybox_shader_program: core.ShaderProgram = try core.ShaderProgram.init(
@@ -192,7 +192,7 @@ pub fn main() !void {
     // Texture buffers:
     var TBOs: [3]c_uint = undefined;
     gl.GenTextures(3, &TBOs);
-    defer gl.DeleteTextures(2, &TBOs);
+    defer gl.DeleteTextures(3, &TBOs);
     const cube_tbo_a: c_uint = TBOs[0];
     const cube_tbo_b: c_uint = TBOs[1];
     const cubemap_tbo: c_uint = TBOs[2];
@@ -294,7 +294,7 @@ pub fn main() !void {
     // we can apply some filtering between the levels when minifying:
     // NOTE: We have to override the previous setting though
     gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
-    var image: zigimg.Image = try zigimg.Image.fromFilePath(allocator, "textures/wood.png");
+    var image: zigimg.Image = try zigimg.Image.fromFilePath(allocator, "textures/container.png");
     errdefer image.deinit();
     // TexImage2D uses the currently bound texture object!
     gl.TexImage2D(
@@ -313,7 +313,7 @@ pub fn main() !void {
     // Let's do the second texture:
     gl.ActiveTexture(gl.TEXTURE1);
     gl.BindTexture(gl.TEXTURE_2D, cube_tbo_b);
-    image = try zigimg.Image.fromFilePath(allocator, "textures/blood.png");
+    image = try zigimg.Image.fromFilePath(allocator, "textures/container_specular.png");
     errdefer image.deinit();
     gl.TexImage2D(
         gl.TEXTURE_2D,
@@ -330,8 +330,8 @@ pub fn main() !void {
     image.deinit();
     textured_shader_program.use(); // We have to .use() the program to be able to set
     // the uniforms, as they don't exist outside this particular program!
-    try textured_shader_program.setInt("u_texture1", 0);
-    try textured_shader_program.setInt("u_texture2", 1);
+    // try textured_shader_program.setInt("u_material.diffuse", 0);
+    // try textured_shader_program.setInt("u_material.specular", 1);
 
     // Creating a skybox
     gl.BindVertexArray(skybox_vao);
@@ -439,33 +439,70 @@ pub fn main() !void {
         gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); // Clear the color and z buffers
         ticker.tick();
 
-        if (!input_handler.display_skybox) {
-            light_shader_program.use();
-            active_shader_program = light_shader_program;
-            try active_shader_program.setBool("u_is_source", true);
-            try active_shader_program.setMat4f("u_view", camera.getViewMat(), true);
-            try active_shader_program.setMat4f("u_proj", projection_mat, true);
-            try active_shader_program.setMat4f("u_model", zm.Mat4f.scaling(0.3, 0.3, 0.3), true,); 
-            try active_shader_program.setVec3f("u_cam_pos", camera.translation);
-            try active_shader_program.setLight(.{
-                .position = zm.Vec3f{0,0,0},// TODO: Parameterize this and reflect in the model transform
-                .ambient = zm.Vec3f{0.2, 0.2, 0.2},
-                .diffuse = zm.Vec3f{0.5, 0.5, 0.5},
-                .specular = zm.Vec3f{1.0, 1.0, 1.0},
-            });
-            try active_shader_program.setMaterial(.{
-                .ambient = zm.Vec3f{0.1, 0.6, 0.05},
-                .diffuse = zm.Vec3f{0.1, 0.6, 0.05},
-                .specular = zm.Vec3f{0.5, 0.5, 0.05},
-                .shininess = 32,
-            });
-            gl.BindVertexArray(light_cube_vao);
-            gl.DrawArrays(gl.TRIANGLES, 0, 36);
-            try active_shader_program.setBool("u_is_source", false);
-        } else {
-            textured_shader_program.use();
-            active_shader_program = textured_shader_program;
+        scene_switch: switch(input_handler.scene) {
+            .skybox => {
+                gl.DepthFunc(gl.LEQUAL); // Change depth function so depth test passes when values are equal to depth buffer's content
+                // gl.DepthMask(gl.FALSE); // Disable depth writing so we don't need to worry about
+                // the scale of the skybox!
+                skybox_shader_program.use();
+                // try skybox_shader_program.setMat4f("view", camera.getSkyboxViewMat(), true);
+                try skybox_shader_program.setMat4f("u_view", zm.Mat4f.identity(), true);
+                try skybox_shader_program.setMat4f("u_proj", projection_mat, true);
+                gl.BindVertexArray(skybox_vao);
+                gl.DrawArrays(gl.TRIANGLES, 0, 36);
+                // gl.DepthMask(gl.TRUE);
+                gl.DepthFunc(gl.LESS); // Set depth function back to default
+                continue :scene_switch scene.InputHandler.Scene.no_skybox_raw;
+            },
+            .no_skybox_raw => {
+                light_shader_program.use();
+                active_shader_program = light_shader_program;
+                try active_shader_program.setBool("u_is_source", true);
+                try active_shader_program.setMat4f("u_view", camera.getViewMat(), true);
+                try active_shader_program.setMat4f("u_proj", projection_mat, true);
+                try active_shader_program.setMat4f("u_model", zm.Mat4f.scaling(0.3, 0.3, 0.3), true,); 
+                try active_shader_program.setVec3f("u_cam_pos", camera.translation);
+                try active_shader_program.setLight(.{
+                    .position = zm.Vec3f{0,0,0},// TODO: Parameterize this and reflect in the model transform
+                    .ambient = zm.Vec3f{0.2, 0.2, 0.2},
+                    .diffuse = zm.Vec3f{0.5, 0.5, 0.5},
+                    .specular = zm.Vec3f{1.0, 1.0, 1.0},
+                });
+                try active_shader_program.setMaterial(.{
+                    .ambient = zm.Vec3f{0.1, 0.6, 0.05},
+                    .diffuse = zm.Vec3f{0.1, 0.6, 0.05},
+                    .specular = zm.Vec3f{0.5, 0.5, 0.05},
+                    .shininess = 32,
+                });
+                gl.BindVertexArray(light_cube_vao);
+                gl.DrawArrays(gl.TRIANGLES, 0, 36);
+                try active_shader_program.setBool("u_is_source", false);
+            },
+            .no_skybox_textured => {
+                textured_shader_program.use();
+                active_shader_program = textured_shader_program;
+                try active_shader_program.setBool("u_is_source", true);
+                try active_shader_program.setMat4f("u_view", camera.getViewMat(), true);
+                try active_shader_program.setMat4f("u_proj", projection_mat, true);
+                try active_shader_program.setMat4f("u_model", zm.Mat4f.scaling(0.3, 0.3, 0.3), true,); 
+                try active_shader_program.setVec3f("u_cam_pos", camera.translation);
+                try active_shader_program.setLight(.{
+                    .position = zm.Vec3f{0,0,0},// TODO: Parameterize this and reflect in the model transform
+                    .ambient = zm.Vec3f{0.2, 0.2, 0.2},
+                    .diffuse = zm.Vec3f{0.5, 0.5, 0.5},
+                    .specular = zm.Vec3f{1.0, 1.0, 1.0},
+                });
+                try active_shader_program.setTextureMaterial(.{
+                    .diffuse_texture_index = 0,
+                    .specular_texture_index = 1,
+                    .shininess = 32,
+                });
+                gl.BindVertexArray(light_cube_vao);
+                gl.DrawArrays(gl.TRIANGLES, 0, 36);
+                try active_shader_program.setBool("u_is_source", false);
+            }
         }
+
         // we need to transpose to go column-major (OpenGL) since zm is
         // row-major.
         try active_shader_program.setMat4f("u_view", camera.getViewMat(), true);
@@ -475,22 +512,6 @@ pub fn main() !void {
             try active_shader_program.setMat4f("u_model", cube_transform, true,); 
             gl.DrawArrays(gl.TRIANGLES, 0, 36);
         }
-        if (input_handler.display_skybox) {
-            // ================= SkyBox =====================
-            gl.DepthFunc(gl.LEQUAL); // Change depth function so depth test passes when values are equal to depth buffer's content
-            // gl.DepthMask(gl.FALSE); // Disable depth writing so we don't need to worry about
-            // the scale of the skybox!
-            skybox_shader_program.use();
-            // try skybox_shader_program.setMat4f("view", camera.getSkyboxViewMat(), true);
-            try skybox_shader_program.setMat4f("u_view", zm.Mat4f.identity(), true);
-            try skybox_shader_program.setMat4f("u_proj", projection_mat, true);
-            gl.BindVertexArray(skybox_vao);
-            gl.DrawArrays(gl.TRIANGLES, 0, 36);
-            // gl.DepthMask(gl.TRUE);
-            gl.DepthFunc(gl.LESS); // Set depth function back to default
-            // ==============================================
-        }
-
 
         context.window.swapBuffers(); // Swap the color buffer used to render at this frame and
         // show it in the window.

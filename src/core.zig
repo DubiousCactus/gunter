@@ -19,6 +19,12 @@ pub const Material = struct {
     shininess: gl.float,
 };
 
+pub const TextureMaterial = struct {
+    diffuse_texture_index: i32,
+    specular_texture_index: i32,
+    shininess: gl.float,
+};
+
 pub const Light = struct {
     position: zm.Vec3f,
     ambient: zm.Vec3f,
@@ -228,6 +234,12 @@ pub const ShaderProgram = struct {
         try self.setVec3f("u_material.ambient", value.ambient);
         try self.setVec3f("u_material.diffuse", value.diffuse);
         try self.setVec3f("u_material.specular", value.specular);
+        try self.setFloat("u_material.shininess", value.shininess);
+    }
+
+    pub fn setTextureMaterial(self: ShaderProgram, value: TextureMaterial) !void {
+        try self.setInt("u_material.diffuse", value.diffuse_texture_index);
+        try self.setInt("u_material.specular", value.specular_texture_index);
         try self.setFloat("u_material.shininess", value.shininess);
     }
 

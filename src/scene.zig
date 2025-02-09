@@ -119,7 +119,13 @@ pub const Camera = struct {
 
 pub const InputHandler = struct {
     cam: *Camera,
-    display_skybox: bool = false,
+    scene: Scene = .no_skybox_textured,
+
+    pub const Scene = union(enum) {
+        skybox,
+        no_skybox_raw,
+        no_skybox_textured,
+    };
 
     pub fn init(cam: *Camera) InputHandler {
         return .{ .cam = cam };
@@ -145,7 +151,13 @@ pub const InputHandler = struct {
             switch (key) {
                 .q => window.setShouldClose(true),
                 .one => {
-                    self.display_skybox = !self.display_skybox;
+                    self.scene = .skybox;
+                },
+                .two => {
+                    self.scene = .no_skybox_raw;
+                },
+                .three => {
+                    self.scene = .no_skybox_textured;
                 },
                 else => {},
             }
