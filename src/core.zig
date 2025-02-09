@@ -25,11 +25,14 @@ pub const TextureMaterial = struct {
     shininess: gl.float,
 };
 
-pub const PositionalLight = struct {
+pub const PointLight = struct {
     position: zm.Vec3f,
     ambient: zm.Vec3f,
     diffuse: zm.Vec3f,
     specular: zm.Vec3f,
+    constant: f32,
+    linear: f32,
+    quadratic: f32,
 };
 
 pub const DirectionalLight = struct {
@@ -255,6 +258,16 @@ pub const ShaderProgram = struct {
         try self.setVec3f("u_light.ambient", value.ambient);
         try self.setVec3f("u_light.diffuse", value.diffuse);
         try self.setVec3f("u_light.specular", value.specular);
+    }
+
+    pub fn setPointLight(self: ShaderProgram, value: PointLight) !void {
+        try self.setVec3f("u_light.position", value.position);
+        try self.setVec3f("u_light.ambient", value.ambient);
+        try self.setVec3f("u_light.diffuse", value.diffuse);
+        try self.setVec3f("u_light.specular", value.specular);
+        try self.setFloat("u_light.constant", value.constant);
+        try self.setFloat("u_light.linear", value.linear);
+        try self.setFloat("u_light.quadratic", value.quadratic);
     }
 };
 

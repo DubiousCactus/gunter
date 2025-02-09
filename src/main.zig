@@ -19,6 +19,7 @@ pub fn main() !void {
     defer arena.deinit();
     const allocator = arena.allocator();
     // =========================== Initialize OpenGL + GLFW ===========================
+    std.debug.print("Setting up OpenGL context...\n", .{});
     var context = try core.Context.init(allocator, screen_w, screen_h, true, true, true);
     defer context.destroy(allocator);
     var ticker = try core.Ticker.init();
@@ -44,6 +45,7 @@ pub fn main() !void {
     }.anonymous_callback);
     // ===================================================================================
     // ===================================== Shaders =====================================
+    std.debug.print("Loading shaders...\n", .{});
     const light_shader_program: core.ShaderProgram = try core.ShaderProgram.init(
         allocator,
         "shaders/vertex_shader_light.glsl",
@@ -53,7 +55,7 @@ pub fn main() !void {
     const textured_shader_program: core.ShaderProgram = try core.ShaderProgram.init(
         allocator,
         "shaders/vertex_shader_light_textured.glsl",
-        "shaders/fragment_shader_light_textured.glsl",
+        "shaders/fragment_shader_pointlight_textured.glsl",
     );
     defer textured_shader_program.delete();
     const skybox_shader_program: core.ShaderProgram = try core.ShaderProgram.init(
@@ -64,6 +66,8 @@ pub fn main() !void {
     defer skybox_shader_program.delete();
     // ===================================================================================
     // ============================ VBOS, VAOs, and VEOs =================================
+    std.debug.print("Loading assets...\n", .{});
+    std.debug.print("\t[*] Vertex data...\n", .{});
     // Let's define triangle vertices in NDC:
     const vertices = [_]gl.float{
         // zig fmt: off
@@ -293,6 +297,7 @@ pub fn main() !void {
     // And to prevent artifacts like the sharp edges visible between two mipmap levels,
     // we can apply some filtering between the levels when minifying:
     // NOTE: We have to override the previous setting though
+    std.debug.print("\t[*] Texture data...\n", .{});
     gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
     var image: zigimg.Image = try zigimg.Image.fromFilePath(allocator, "textures/container.png");
     errdefer image.deinit();
@@ -333,6 +338,7 @@ pub fn main() !void {
     // try textured_shader_program.setInt("u_material.diffuse", 0);
     // try textured_shader_program.setInt("u_material.specular", 1);
 
+    std.debug.print("\t[*] Skybox data...\n", .{});
     // Creating a skybox
     gl.BindVertexArray(skybox_vao);
     // defer gl.BindVertexArray(0);
@@ -396,6 +402,7 @@ pub fn main() !void {
     gl.EnableVertexAttribArray(index);
     
     // ===================================================================================
+    std.debug.print("Moving things around...\n", .{});
     gl.ClearColor(0.0, 0.0, 0.0, 1);
     var active_shader_program: core.ShaderProgram = textured_shader_program;
     var model_mat: zm.Mat4f = zm.Mat4f.multiply(
@@ -432,11 +439,12 @@ pub fn main() !void {
         cube_transforms[i] = zm.Mat4f.translationVec3(pos).multiply(model_mat.multiply(cube_rot));
     }
     gl.PolygonMode(gl.FRONT_AND_BACK, gl.FILL);
-
+    std.debug.print("Done!\n", .{});
 
     // Wait for the user to close the window. This is the render loop!
     while (!context.window.shouldClose()) {
         gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); // Clear the color and z buffers
+        input_handler.consume(context.window);
         ticker.tick();
 
         scene_switch: switch(input_handler.scene) {
@@ -452,7 +460,7 @@ pub fn main() !void {
                 gl.DrawArrays(gl.TRIANGLES, 0, 36);
                 // gl.DepthMask(gl.TRUE);
                 gl.DepthFunc(gl.LESS); // Set depth function back to default
-                continue :scene_switch scene.InputHandler.Scene.no_skybox_raw;
+                continue :scene_switch scene.InputHandler.Scene.no_skybox_textured;
             },
             .no_skybox_raw => {
                 light_shader_program.use();
@@ -481,25 +489,28 @@ pub fn main() !void {
             .no_skybox_textured => {
                 textured_shader_program.use();
                 active_shader_program = textured_shader_program;
-                // try active_shader_program.setBool("u_is_source", true);
+                try active_shader_program.setBool("u_is_source", true);
                 try active_shader_program.setMat4f("u_view", camera.getViewMat(), true);
                 try active_shader_program.setMat4f("u_proj", projection_mat, true);
                 try active_shader_program.setMat4f("u_model", zm.Mat4f.scaling(0.3, 0.3, 0.3), true,); 
                 try active_shader_program.setVec3f("u_cam_pos", camera.translation);
-                try active_shader_program.setDirectionalLight(.{
-                    .direction = zm.Vec3f{-0.2, -1.0, -0.3},
+                try active_shader_program.setPointLight(.{
+                    .position = zm.Vec3f{0.0, 0.0, 0.0},
                     .ambient = zm.Vec3f{0.2, 0.2, 0.2},
                     .diffuse = zm.Vec3f{0.5, 0.5, 0.5},
                     .specular = zm.Vec3f{1.0, 1.0, 1.0},
+                    .constant = 1.0,
+                    .linear = 0.09,
+                    .quadratic = 0.032,
                 });
                 try active_shader_program.setTextureMaterial(.{
                     .diffuse_texture_index = 0,
                     .specular_texture_index = 1,
                     .shininess = 32,
                 });
-                // gl.BindVertexArray(light_cube_vao);
-                // gl.DrawArrays(gl.TRIANGLES, 0, 36);
-                // try active_shader_program.setBool("u_is_source", false);
+                gl.BindVertexArray(light_cube_vao);
+                gl.DrawArrays(gl.TRIANGLES, 0, 36);
+                try active_shader_program.setBool("u_is_source", false);
             }
         }
 

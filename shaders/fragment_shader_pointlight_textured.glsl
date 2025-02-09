@@ -12,10 +12,14 @@ struct Material {
 };
 
 struct Light {
-  vec3 direction;
+  vec3 position;
   vec3 ambient;
   vec3 diffuse;
   vec3 specular;
+
+  float constant;
+  float linear;
+  float quadratic;
 };
 
 uniform Material u_material;
@@ -29,8 +33,7 @@ void main() {
     o_frag_color = vec4(1.0, 1.0, 1.0, 1.0);
   } else {
     vec3 normal = normalize(io_normal);
-    // vec3 light_dir = normalize(u_light.position - io_frag_w_pos);
-    vec3 light_dir = normalize(-u_light.direction);
+    vec3 light_dir = normalize(u_light.position - io_frag_w_pos);
     vec3 view_dir = normalize(u_cam_pos - io_frag_w_pos);
 
     vec3 diffuse = max(dot(normal, light_dir), 0.0) *
@@ -42,6 +45,9 @@ void main() {
                         u_material.shininess) *
                     vec3(texture(u_material.specular, io_text_coords)) *
                     u_light.specular;
-    o_frag_color = vec4(ambient + diffuse + specular, 1.0);
+    float dist = length(io_frag_w_pos - u_light.position);
+    float attenuation = 1.0 / (u_light.constant + u_light.linear * dist +
+                               u_light.quadratic * pow(dist, 2));
+    o_frag_color = attenuation * vec4(ambient + diffuse + specular, 1.0);
   }
 }
