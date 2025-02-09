@@ -139,15 +139,7 @@ pub const InputHandler = struct {
         _ = scancode;
         _ = mods;
 
-        if (action == .repeat) {
-            switch (key) {
-                .w => self.cam.moveFwd(),
-                .s => self.cam.moveBck(),
-                .a => self.cam.moveLeft(),
-                .d => self.cam.moveRight(),
-                else => {},
-            }
-        } else if (action == .press) {
+        if (action == .press) {
             switch (key) {
                 .q => window.setShouldClose(true),
                 .one => {
@@ -165,5 +157,17 @@ pub const InputHandler = struct {
         // TODO: It would be very nice to be able to hook any functions with a given key
         // + action, so that we can do anything from user code without touching the
         // input handler. For this we would need a Map of .{keycode, action} -> comptime fn or something like that.
+    }
+
+    pub fn consume(self: *InputHandler, window: glfw.Window) void {
+        if (window.getKey(.w) == .press) {
+            self.cam.moveFwd();
+        } else if (window.getKey(.s) == .press) {
+            self.cam.moveBck();
+        } else if (window.getKey(.a) == .press) {
+            self.cam.moveLeft();
+        } else if (window.getKey(.d) == .press) {
+            self.cam.moveRight();
+        }
     }
 };
