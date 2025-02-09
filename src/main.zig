@@ -528,7 +528,8 @@ pub fn main() !void {
                 try active_shader_program.setSpotLight(.{
                     .position = camera.translation,
                     .direction = camera.front,
-                    .cutoff_angle_cosine = @cos(std.math.degreesToRadians(15)),
+                    .inner_cutoff_angle_cosine = @cos(std.math.degreesToRadians(15)),
+                    .outer_cutoff_angle_cosine = @cos(std.math.degreesToRadians(25)),
                     .ambient = zm.Vec3f{0.2, 0.2, 0.2},
                     .diffuse = zm.Vec3f{0.7, 0.7, 0.7},
                     .specular = zm.Vec3f{1.0, 1.0, 1.0},

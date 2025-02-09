@@ -45,7 +45,8 @@ pub const DirectionalLight = struct {
 pub const SpotLight = struct {
     position: zm.Vec3f,
     direction: zm.Vec3f,
-    cutoff_angle_cosine: f32,
+    inner_cutoff_angle_cosine: f32,
+    outer_cutoff_angle_cosine: f32,
     ambient: zm.Vec3f,
     diffuse: zm.Vec3f,
     specular: zm.Vec3f,
@@ -285,7 +286,8 @@ pub const ShaderProgram = struct {
     pub fn setSpotLight(self: ShaderProgram, value: SpotLight) !void {
         try self.setVec3f("u_light.position", value.position);
         try self.setVec3f("u_light.direction", value.direction);
-        try self.setFloat("u_light.cutoff_angle_cosine", value.cutoff_angle_cosine);
+        try self.setFloat("u_light.inner_cutoff_angle_cosine", value.inner_cutoff_angle_cosine);
+        try self.setFloat("u_light.outer_cutoff_angle_cosine", value.outer_cutoff_angle_cosine);
         try self.setVec3f("u_light.ambient", value.ambient);
         try self.setVec3f("u_light.diffuse", value.diffuse);
         try self.setVec3f("u_light.specular", value.specular);
