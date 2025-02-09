@@ -58,6 +58,12 @@ pub fn main() !void {
         "shaders/fragment_shader_pointlight_textured.glsl",
     );
     defer textured_shader_program.delete();
+    const spotlight_textured_shader_program: core.ShaderProgram = try core.ShaderProgram.init(
+        allocator,
+        "shaders/vertex_shader_light_textured.glsl",
+        "shaders/fragment_shader_spotlight_textured.glsl",
+    );
+    defer spotlight_textured_shader_program.delete();
     const skybox_shader_program: core.ShaderProgram = try core.ShaderProgram.init(
         allocator,
         "shaders/vertex_shader_skybox.glsl",
@@ -511,7 +517,31 @@ pub fn main() !void {
                 gl.BindVertexArray(light_cube_vao);
                 gl.DrawArrays(gl.TRIANGLES, 0, 36);
                 try active_shader_program.setBool("u_is_source", false);
-            }
+            },
+            .no_skybox_textured_spotlight => {
+                spotlight_textured_shader_program.use();
+                active_shader_program = spotlight_textured_shader_program;
+                try active_shader_program.setMat4f("u_view", camera.getViewMat(), true);
+                try active_shader_program.setMat4f("u_proj", projection_mat, true);
+                try active_shader_program.setMat4f("u_model", zm.Mat4f.scaling(0.3, 0.3, 0.3), true,); 
+                try active_shader_program.setVec3f("u_cam_pos", camera.translation);
+                try active_shader_program.setSpotLight(.{
+                    .position = camera.translation,
+                    .direction = camera.front,
+                    .cutoff_angle_cosine = @cos(std.math.degreesToRadians(15)),
+                    .ambient = zm.Vec3f{0.2, 0.2, 0.2},
+                    .diffuse = zm.Vec3f{0.7, 0.7, 0.7},
+                    .specular = zm.Vec3f{1.0, 1.0, 1.0},
+                    .constant = 1.0,
+                    .linear = 0.027,
+                    .quadratic = 0.0028,
+                });
+                try active_shader_program.setTextureMaterial(.{
+                    .diffuse_texture_index = 0,
+                    .specular_texture_index = 1,
+                    .shininess = 32,
+                });
+            },
         }
 
         // we need to transpose to go column-major (OpenGL) since zm is

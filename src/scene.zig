@@ -125,6 +125,7 @@ pub const InputHandler = struct {
         skybox,
         no_skybox_raw,
         no_skybox_textured,
+        no_skybox_textured_spotlight,
     };
 
     pub fn init(cam: *Camera) InputHandler {
@@ -150,6 +151,9 @@ pub const InputHandler = struct {
                 },
                 .three => {
                     self.scene = .no_skybox_textured;
+                },
+                .four => {
+                    self.scene = .no_skybox_textured_spotlight;
                 },
                 else => {},
             }

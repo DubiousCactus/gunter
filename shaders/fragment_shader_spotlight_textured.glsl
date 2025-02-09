@@ -1,0 +1,64 @@
+#version 410 core
+
+in vec3 io_normal;     // This gets interpolated from the output vertices
+in vec3 io_frag_w_pos; // This gets interpolated as well
+in vec2 io_text_coords;
+out vec4 o_frag_color;
+
+struct Material {
+  sampler2D diffuse;  // Color of the surface under diffuse lighting
+  sampler2D specular; // Color of the surface under specular highlights
+  float shininess;    // Scattering/radius of the specular hilights
+};
+
+struct Light {
+  vec3 position;
+  vec3 direction;
+  float cutoff_angle_cosine;
+
+  vec3 ambient;
+  vec3 diffuse;
+  vec3 specular;
+
+  float constant;
+  float linear;
+  float quadratic;
+};
+
+uniform Material u_material;
+uniform Light u_light;
+
+uniform vec3 u_cam_pos;
+uniform bool u_is_source;
+
+void main() {
+  if (u_is_source) {
+    o_frag_color = vec4(1.0, 1.0, 1.0, 1.0);
+  } else {
+    vec3 normal = normalize(io_normal);
+    vec3 incoming_light_dir = normalize(u_light.position - io_frag_w_pos);
+    vec3 view_dir = normalize(u_cam_pos - io_frag_w_pos);
+    float theta = dot(incoming_light_dir, normalize(-u_light.direction));
+
+    vec3 ambient =
+        u_light.ambient * vec3(texture(u_material.diffuse, io_text_coords));
+    vec3 diffuse = vec3(0);
+    vec3 specular = vec3(0);
+
+    if (theta > u_light.cutoff_angle_cosine) {
+      diffuse = max(dot(normal, incoming_light_dir), 0.0) *
+                vec3(texture(u_material.diffuse, io_text_coords)) *
+                u_light.diffuse;
+      specular =
+          pow(max(dot(reflect(-incoming_light_dir, normal), view_dir), 0.0),
+              u_material.shininess) *
+          vec3(texture(u_material.specular, io_text_coords)) * u_light.specular;
+    }
+
+    float dist = length(io_frag_w_pos - u_light.position);
+    float attenuation = 1.0 / (u_light.constant + u_light.linear * dist +
+                               u_light.quadratic * pow(dist, 2));
+    o_frag_color =
+        vec4(ambient, 1.0) + attenuation * vec4(diffuse + specular, 1.0);
+  }
+}

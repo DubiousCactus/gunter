@@ -42,6 +42,18 @@ pub const DirectionalLight = struct {
     specular: zm.Vec3f,
 };
 
+pub const SpotLight = struct {
+    position: zm.Vec3f,
+    direction: zm.Vec3f,
+    cutoff_angle_cosine: f32,
+    ambient: zm.Vec3f,
+    diffuse: zm.Vec3f,
+    specular: zm.Vec3f,
+    constant: f32,
+    linear: f32,
+    quadratic: f32,
+};
+
 pub const ShaderProgram = struct {
     // Shaders, shaders, shaders... And non-shading pipeline stages!
     // VERTEX SHADERS (in: single vertex, out: single vertex): Take in 3D coordinates and transform them (e.g. for wind effects, or just transforming to NDC).
@@ -115,8 +127,8 @@ pub const ShaderProgram = struct {
         if (success != gl.TRUE) {
             gl.GetShaderInfoLog(vertex_shader, info_log.len, null, &info_log);
             gl_log.err(
-                "failed to compile vertex shader: {?s}",
-                .{std.mem.sliceTo(&info_log, 0)},
+                "failed to compile vertex shader '{s}': {?s}",
+                .{ vert_shader_pth, std.mem.sliceTo(&info_log, 0) },
             );
             return error.CompileShaderFailed;
         }
@@ -150,10 +162,10 @@ pub const ShaderProgram = struct {
         gl.GetShaderiv(frag_shader, gl.COMPILE_STATUS, &success);
         if (success != gl.TRUE) {
             gl.GetShaderInfoLog(frag_shader, info_log.len, null, &info_log);
-            gl_log.err("failed to compile vertex shader: {?s}", .{std.mem.sliceTo(
+            gl_log.err("failed to compile fragment shader '{s}': {?s}", .{ frag_shader_pth, std.mem.sliceTo(
                 &info_log,
                 0,
-            )});
+            ) });
             return error.CompileShaderFailed;
         }
 
@@ -262,6 +274,18 @@ pub const ShaderProgram = struct {
 
     pub fn setPointLight(self: ShaderProgram, value: PointLight) !void {
         try self.setVec3f("u_light.position", value.position);
+        try self.setVec3f("u_light.ambient", value.ambient);
+        try self.setVec3f("u_light.diffuse", value.diffuse);
+        try self.setVec3f("u_light.specular", value.specular);
+        try self.setFloat("u_light.constant", value.constant);
+        try self.setFloat("u_light.linear", value.linear);
+        try self.setFloat("u_light.quadratic", value.quadratic);
+    }
+
+    pub fn setSpotLight(self: ShaderProgram, value: SpotLight) !void {
+        try self.setVec3f("u_light.position", value.position);
+        try self.setVec3f("u_light.direction", value.direction);
+        try self.setFloat("u_light.cutoff_angle_cosine", value.cutoff_angle_cosine);
         try self.setVec3f("u_light.ambient", value.ambient);
         try self.setVec3f("u_light.diffuse", value.diffuse);
         try self.setVec3f("u_light.specular", value.specular);
