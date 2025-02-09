@@ -64,6 +64,12 @@ pub fn main() !void {
         "shaders/fragment_shader_spotlight_textured.glsl",
     );
     defer spotlight_textured_shader_program.delete();
+    const multilight_textured_shader_program: core.ShaderProgram = try core.ShaderProgram.init(
+        allocator,
+        "shaders/vertex_shader_light_textured.glsl",
+        "shaders/fragment_shader_multilight_textured.glsl",
+    );
+    defer multilight_textured_shader_program.delete();
     const skybox_shader_program: core.ShaderProgram = try core.ShaderProgram.init(
         allocator,
         "shaders/vertex_shader_skybox.glsl",
@@ -445,6 +451,13 @@ pub fn main() !void {
         cube_transforms[i] = zm.Mat4f.translationVec3(pos).multiply(model_mat.multiply(cube_rot));
     }
     gl.PolygonMode(gl.FRONT_AND_BACK, gl.FILL);
+
+    const point_lights = [_]zm.Vec3f{
+        zm.Vec3f{0.7, 0.2, 2.0},
+        zm.Vec3f{2.3, -3.3, -4.0},
+        zm.Vec3f{-4.0, 2.0, -12.0},
+        zm.Vec3f{0.0, 0.0, -3.0},
+    };
     std.debug.print("Done!\n", .{});
 
     // Wait for the user to close the window. This is the render loop!
@@ -459,8 +472,8 @@ pub fn main() !void {
                 // gl.DepthMask(gl.FALSE); // Disable depth writing so we don't need to worry about
                 // the scale of the skybox!
                 skybox_shader_program.use();
-                // try skybox_shader_program.setMat4f("view", camera.getSkyboxViewMat(), true);
-                try skybox_shader_program.setMat4f("u_view", zm.Mat4f.identity(), true);
+                try skybox_shader_program.setMat4f("u_view", camera.getSkyboxViewMat(), true);
+                // try skybox_shader_program.setMat4f("u_view", zm.Mat4f.identity(), true);
                 try skybox_shader_program.setMat4f("u_proj", projection_mat, true);
                 gl.BindVertexArray(skybox_vao);
                 gl.DrawArrays(gl.TRIANGLES, 0, 36);
@@ -500,7 +513,7 @@ pub fn main() !void {
                 try active_shader_program.setMat4f("u_proj", projection_mat, true);
                 try active_shader_program.setMat4f("u_model", zm.Mat4f.scaling(0.3, 0.3, 0.3), true,); 
                 try active_shader_program.setVec3f("u_cam_pos", camera.translation);
-                try active_shader_program.setPointLight(.{
+                try active_shader_program.setPointLight(null, .{
                     .position = zm.Vec3f{0.0, 0.0, 0.0},
                     .ambient = zm.Vec3f{0.2, 0.2, 0.2},
                     .diffuse = zm.Vec3f{0.5, 0.5, 0.5},
@@ -543,6 +556,53 @@ pub fn main() !void {
                     .shininess = 32,
                 });
             },
+            .no_skybox_textured_multilight => {
+                multilight_textured_shader_program.use();
+                active_shader_program = multilight_textured_shader_program;
+                try active_shader_program.setBool("u_is_source", true);
+                try active_shader_program.setMat4f("u_view", camera.getViewMat(), true);
+                try active_shader_program.setMat4f("u_proj", projection_mat, true);
+                try active_shader_program.setMat4f("u_model", zm.Mat4f.scaling(0.3, 0.3, 0.3), true,); 
+                try active_shader_program.setVec3f("u_cam_pos", camera.translation);
+                for (point_lights, 0..) |light_pos, i| {
+                    try active_shader_program.setPointLight(@as(u8, @intCast(i)), .{
+                        .position = light_pos,
+                        .ambient = zm.Vec3f{0.1, 0.1, 0.1},
+                        .diffuse = zm.Vec3f{0.3, 0.3, 0.3},
+                        .specular = zm.Vec3f{1.0, 1.0, 1.0},
+                        .constant = 1.0,
+                        .linear = 0.09,
+                        .quadratic = 0.032,
+                    });
+                    gl.BindVertexArray(light_cube_vao);
+                    try active_shader_program.setMat4f("u_model", zm.Mat4f.translationVec3(light_pos), true,); 
+                    gl.DrawArrays(gl.TRIANGLES, 0, 36);
+                }
+                try active_shader_program.setSpotLight(.{
+                    .position = camera.translation,
+                    .direction = camera.front,
+                    .inner_cutoff_angle_cosine = @cos(std.math.degreesToRadians(15)),
+                    .outer_cutoff_angle_cosine = @cos(std.math.degreesToRadians(25)),
+                    .ambient = zm.Vec3f{0.1, 0.1, 0.1},
+                    .diffuse = zm.Vec3f{0.9, 0.0, 0.0},
+                    .specular = zm.Vec3f{1.0, 0.0, 0.0},
+                    .constant = 1.0,
+                    .linear = 0.027,
+                    .quadratic = 0.0028,
+                });
+                try active_shader_program.setDirectionalLight(.{
+                    .direction = zm.Vec3f{-0.2, -6.0, -2.3},
+                    .ambient = zm.Vec3f{0.1, 0.1, 0.1},
+                    .diffuse = zm.Vec3f{0.2, 0.2, 0.2},
+                    .specular = zm.Vec3f{1.0, 1.0, 1.0},
+                });
+                try active_shader_program.setTextureMaterial(.{
+                    .diffuse_texture_index = 0,
+                    .specular_texture_index = 1,
+                    .shininess = 32,
+                });
+                try active_shader_program.setBool("u_is_source", false);
+            }
         }
 
         // we need to transpose to go column-major (OpenGL) since zm is

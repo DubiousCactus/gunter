@@ -105,14 +105,11 @@ pub const Camera = struct {
     }
 
     pub fn getSkyboxViewMat(self: *Camera) zm.Mat4f {
-        // const view_mat = self.getViewMat();
-        // return view_mat.removeTranslation();
+        // const view_mat = self.getViewMat(); would be ideal!
         const translation = self.translation;
         self.translation = zm.vec.zero(3, f16);
-        self.up = -self.up;
         const view_mat = self.getViewMat();
         self.translation = translation;
-        self.up = -self.up;
         return view_mat;
     }
 };
@@ -126,6 +123,7 @@ pub const InputHandler = struct {
         no_skybox_raw,
         no_skybox_textured,
         no_skybox_textured_spotlight,
+        no_skybox_textured_multilight,
     };
 
     pub fn init(cam: *Camera) InputHandler {
@@ -154,6 +152,9 @@ pub const InputHandler = struct {
                 },
                 .four => {
                     self.scene = .no_skybox_textured_spotlight;
+                },
+                .five => {
+                    self.scene = .no_skybox_textured_multilight;
                 },
                 else => {},
             }

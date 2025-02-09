@@ -267,33 +267,58 @@ pub const ShaderProgram = struct {
     }
 
     pub fn setDirectionalLight(self: ShaderProgram, value: DirectionalLight) !void {
-        try self.setVec3f("u_light.direction", value.direction);
-        try self.setVec3f("u_light.ambient", value.ambient);
-        try self.setVec3f("u_light.diffuse", value.diffuse);
-        try self.setVec3f("u_light.specular", value.specular);
+        try self.setVec3f("u_dir_light.direction", value.direction);
+        try self.setVec3f("u_dir_light.ambient", value.ambient);
+        try self.setVec3f("u_dir_light.diffuse", value.diffuse);
+        try self.setVec3f("u_dir_light.specular", value.specular);
     }
 
-    pub fn setPointLight(self: ShaderProgram, value: PointLight) !void {
-        try self.setVec3f("u_light.position", value.position);
-        try self.setVec3f("u_light.ambient", value.ambient);
-        try self.setVec3f("u_light.diffuse", value.diffuse);
-        try self.setVec3f("u_light.specular", value.specular);
-        try self.setFloat("u_light.constant", value.constant);
-        try self.setFloat("u_light.linear", value.linear);
-        try self.setFloat("u_light.quadratic", value.quadratic);
+    pub fn setPointLight(self: ShaderProgram, index: ?u8, value: PointLight) !void {
+        var name_buf: [64:0]u8 = undefined; // Sentinel-terminated buffer
+        var suffix_buf: [32:0]u8 = undefined; // Separate buffer for suffixes
+
+        // Build the base name (e.g., "u_point_lights[0]")
+        const base = if (index) |i|
+            try std.fmt.bufPrint(&name_buf, "u_point_lights[{d}]", .{i})
+        else
+            try std.fmt.bufPrint(&name_buf, "u_point_light", .{});
+        name_buf[base.len] = 0; // Explicit null terminator
+
+        // Iterate over suffixes at COMPILE-TIME (no runtime switching)
+        inline for (.{ "position", "ambient", "diffuse", "specular", "constant", "linear", "quadratic" }) |suffix| {
+            // Build the full uniform name (e.g., "u_point_lights[0].position")
+            const full_name = try std.fmt.bufPrintZ(&suffix_buf, "{s}.{s}", .{ std.mem.sliceTo(&name_buf, 0), suffix });
+
+            // Handle each case at COMPILE-TIME (no runtime string comparison)
+            if (comptime std.mem.eql(u8, suffix, "position")) {
+                try self.setVec3f(full_name, value.position);
+            } else if (comptime std.mem.eql(u8, suffix, "ambient")) {
+                try self.setVec3f(full_name, value.ambient);
+            } else if (comptime std.mem.eql(u8, suffix, "diffuse")) {
+                try self.setVec3f(full_name, value.diffuse);
+            } else if (comptime std.mem.eql(u8, suffix, "specular")) {
+                try self.setVec3f(full_name, value.specular);
+            } else if (comptime std.mem.eql(u8, suffix, "constant")) {
+                try self.setFloat(full_name, value.constant);
+            } else if (comptime std.mem.eql(u8, suffix, "linear")) {
+                try self.setFloat(full_name, value.linear);
+            } else if (comptime std.mem.eql(u8, suffix, "quadratic")) {
+                try self.setFloat(full_name, value.quadratic);
+            }
+        }
     }
 
     pub fn setSpotLight(self: ShaderProgram, value: SpotLight) !void {
-        try self.setVec3f("u_light.position", value.position);
-        try self.setVec3f("u_light.direction", value.direction);
-        try self.setFloat("u_light.inner_cutoff_angle_cosine", value.inner_cutoff_angle_cosine);
-        try self.setFloat("u_light.outer_cutoff_angle_cosine", value.outer_cutoff_angle_cosine);
-        try self.setVec3f("u_light.ambient", value.ambient);
-        try self.setVec3f("u_light.diffuse", value.diffuse);
-        try self.setVec3f("u_light.specular", value.specular);
-        try self.setFloat("u_light.constant", value.constant);
-        try self.setFloat("u_light.linear", value.linear);
-        try self.setFloat("u_light.quadratic", value.quadratic);
+        try self.setVec3f("u_spot_light.position", value.position);
+        try self.setVec3f("u_spot_light.direction", value.direction);
+        try self.setFloat("u_spot_light.inner_cutoff_angle_cosine", value.inner_cutoff_angle_cosine);
+        try self.setFloat("u_spot_light.outer_cutoff_angle_cosine", value.outer_cutoff_angle_cosine);
+        try self.setVec3f("u_spot_light.ambient", value.ambient);
+        try self.setVec3f("u_spot_light.diffuse", value.diffuse);
+        try self.setVec3f("u_spot_light.specular", value.specular);
+        try self.setFloat("u_spot_light.constant", value.constant);
+        try self.setFloat("u_spot_light.linear", value.linear);
+        try self.setFloat("u_spot_light.quadratic", value.quadratic);
     }
 };
 
