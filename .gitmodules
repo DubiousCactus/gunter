@@ -1,0 +1,3 @@
+[submodule "zig-assimp"]
+	path = zig-assimp
+	url = git@github.com:ikskuh/zig-assimp.git

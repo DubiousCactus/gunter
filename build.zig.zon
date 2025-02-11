@@ -32,12 +32,15 @@
             .hash = "122022ea6df16700e521078c20d7d01f894c6f967e6c6ce1ea166426b4fc61667de3",
         },
         .zigimg = .{
-            .url = "https://github.com/zigimg/zigimg/archive/master.tar.gz",
-            .hash = "1220ad1b5a659cae9cf50e936b2d82778defe52f70a2f266c1afe96be809f604287a",
+            .url = "git+https://github.com/zigimg/zigimg.git#c2804133fbfe78ebefe4b7f1a9420f4c98abfeff",
+            .hash = "12204b5a4c9c08ab8e54b2acb1549d1c2bb86fd29e51666f1f0a963f6a82aff65b84",
         },
         .zm = .{
             .url = "git+https://github.com/griush/zm#50d6c83ee4bf3ae8b0ab370cfe77e700d8fdd601",
             .hash = "12206ec8ddce3c622a8d809e1aa92d9ec2c05e88de0f85eadc98a6ed7fdad5c79b07",
+        },
+        .assimp = .{
+            .path = "modules/assimp",
         },
     },
     .paths = .{

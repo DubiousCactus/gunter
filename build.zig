@@ -64,6 +64,12 @@ pub fn build(b: *std.Build) void {
     const zm = b.dependency("zm", .{});
     exe.root_module.addImport("zm", zm.module("zm"));
 
+    const assimp = b.dependency("assimp", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    exe.root_module.addImport("assimp", assimp.module("root"));
+
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
     // step when running `zig build`).
