@@ -42,6 +42,10 @@
         .assimp = .{
             .path = "modules/assimp",
         },
+        .zmesh = .{
+            .url = "git+https://github.com/zig-gamedev/zmesh.git#1fc267af7c8bd00cb2d79de12b3e0512a3b787cf",
+            .hash = "1220791c58e1f2e911d5b776efe8893c64684a56d9196b98d95b59ee45b3624b048d",
+        },
     },
     .paths = .{
         "build.zig",

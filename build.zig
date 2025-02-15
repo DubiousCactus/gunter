@@ -70,6 +70,10 @@ pub fn build(b: *std.Build) void {
     });
     exe.root_module.addImport("assimp", assimp.module("root"));
 
+    const zmesh = b.dependency("zmesh", .{});
+    exe.root_module.addImport("zmesh", zmesh.module("root"));
+    exe.linkLibrary(zmesh.artifact("zmesh"));
+
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
     // step when running `zig build`).
