@@ -94,39 +94,38 @@ pub const Mesh = struct {
         gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.MIRRORED_REPEAT);
         gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
         gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-        _ = shader_program;
         // TODO: Handle more than one texture per material!
-        // var diffuse_nr: u8 = 1;
-        // var specular_nr: u8 = 1;
-        // var texture_mat = core.TextureMaterial{
-        //     .diffuse_texture_index = undefined,
-        //     .specular_texture_index = undefined,
-        //     .shininess = 1,
-        // };
-        // for (self.textures, 0..) |texture, i| {
-        //     gl.ActiveTexture(gl.TEXTURE0 + @as(c_uint, @intCast(i)));
-        //     gl.BindTexture(gl.TEXTURE_2D, texture.id);
-        //     switch (texture.type_) {
-        //         .diffuse => {
-        //             if (diffuse_nr > 1) {
-        //                 std.debug.print("Hey man we don't handle multiple textures per material. Only 1 diffuse and 1 specular allowed bro it's what it is.\n", .{});
-        //                 return error.TooManyTextures;
-        //             }
-        //             texture_mat.diffuse_texture_index = texture.id;
-        //             diffuse_nr += 1;
-        //         },
-        //         .specular => {
-        //             if (specular_nr > 1) {
-        //                 std.debug.print("Hey man we don't handle multiple textures per material. Only 1 diffuse and 1 specular allowed bro it's what it is.\n", .{});
-        //                 return error.TooManyTextures;
-        //             }
-        //             texture_mat.specular_texture_index = texture.id;
-        //             specular_nr += 1;
-        //         },
-        //     }
-        // }
+        var diffuse_nr: u8 = 1;
+        var specular_nr: u8 = 1;
+        var texture_mat = core.TextureMaterial{
+            .diffuse_texture_index = undefined,
+            .specular_texture_index = undefined,
+            .shininess = 1,
+        };
+        for (self.textures, 0..) |tex, i| {
+            gl.ActiveTexture(gl.TEXTURE0 + @as(c_uint, @intCast(i)));
+            gl.BindTexture(gl.TEXTURE_2D, tex.id);
+            switch (tex.type_) {
+                .diffuse, .base_color => {
+                    if (diffuse_nr > 1) {
+                        std.debug.print("Hey man we don't handle multiple textures per material. Only 1 diffuse and 1 specular allowed bro it's what it is.\n", .{});
+                        return error.TooManyTextures;
+                    }
+                    texture_mat.diffuse_texture_index = @as(i32, @intCast(tex.id));
+                    diffuse_nr += 1;
+                },
+                .specular, .metalic_roughness => {
+                    if (specular_nr > 1) {
+                        std.debug.print("Hey man we don't handle multiple textures per material. Only 1 diffuse and 1 specular allowed bro it's what it is.\n", .{});
+                        return error.TooManyTextures;
+                    }
+                    texture_mat.specular_texture_index = @as(i32, @intCast(tex.id));
+                    specular_nr += 1;
+                },
+            }
+        }
         // // TODO: Where do we store the shininess during model loading?
-        // try shader_program.setTextureMaterial(texture_mat);
+        try shader_program.setTextureMaterial(texture_mat);
         // gl.ActiveTexture(gl.TEXTURE0); // TODO: Is this needed? Why?
         gl.BindVertexArray(self.VAO);
         gl.DrawElements(gl.TRIANGLES, @as(c_int, @intCast(self.indices.len)), gl.UNSIGNED_INT, 0);
@@ -147,51 +146,25 @@ pub const Mesh = struct {
 
 pub const Model = struct {
     meshes: std.ArrayList(Mesh),
+    path: []const u8,
     directory: []const u8,
+    loaded_textures: std.StringHashMap(texture.Texture),
 
     pub const Error = error{
         NotImplementedError,
     };
 
-    pub fn init(path: [:0]const u8, allocator: std.mem.Allocator) !Model {
+    pub const LoadingMode = enum {
+        load_entire_scene,
+        load_root_mesh_only,
+    };
+
+    pub fn init(path: [:0]const u8, allocator: std.mem.Allocator, mode: LoadingMode) !Model {
         std.debug.print("Loading asset: '{s}'...\n", .{path});
         zmesh.init(allocator);
         defer zmesh.deinit();
-        var root_progress = std.Progress.start(.{});
-        defer root_progress.end();
         const data = try zmesh.io.zcgltf.parseAndLoadFile(path);
         defer zmesh.io.zcgltf.freeData(data);
-
-        // var mesh_indices = std.ArrayList(u32).init(allocator);
-        // var mesh_positions = std.ArrayList([3]f32).init(allocator);
-        // var mesh_normals = std.ArrayList([3]f32).init(allocator);
-        //
-        // try zmesh.io.zcgltf.appendMeshPrimitive(
-        //     data,
-        //     0, // mesh index
-        //     0, // gltf primitive index (submesh index)
-        //     &mesh_indices,
-        //     &mesh_positions,
-        //     &mesh_normals, // normals (optional)
-        //     null, // texcoords (optional)
-        //     null, // tangents (optional)
-        // );
-        std.debug.print("\t[*]Parsing the scene...\n", .{});
-        var meshes: std.ArrayList(Mesh) = std.ArrayList(Mesh).init(allocator);
-        if (data.scene) |main_scene| {
-            std.debug.print("has {d} nodes\n", .{main_scene.nodes_count});
-            if (main_scene.nodes) |nodes| {
-                var scene_progress = root_progress.start("Parsing the scene", main_scene.nodes_count);
-                for (0..main_scene.nodes_count) |i| {
-                    const root_node: *zmesh.io.zcgltf.Node = nodes[i];
-                    try Model.load_node(root_node, &meshes, allocator, scene_progress);
-                }
-                scene_progress.end();
-            }
-        } else {
-            log.err("failed to find a main scene for gltf file: {s}", .{path});
-            return error.NoMainSceneFound;
-        }
 
         var directory: []const u8 = undefined;
         if (std.fs.path.dirname(path)) |dir| {
@@ -199,26 +172,89 @@ pub const Model = struct {
         } else {
             log.err("failed to find the directory for {s}", .{path});
         }
-        return .{ .meshes = meshes, .directory = directory };
+
+        var model = Model{
+            .meshes = std.ArrayList(Mesh).init(allocator),
+            .directory = std.mem.sliceTo(directory, 0),
+            .path = path,
+            .loaded_textures = std.StringHashMap(texture.Texture).init(allocator),
+        };
+        switch (mode) {
+            .load_entire_scene => {
+                try model.load_entire_scene(data, allocator);
+            },
+            .load_root_mesh_only => {
+                try model.load_root_mesh(data, allocator);
+            },
+        }
+        return model;
+    }
+
+    fn load_entire_scene(self: *Model, data: *zmesh.io.zcgltf.Data, allocator: std.mem.Allocator) !void {
+        var root_progress = std.Progress.start(.{});
+        defer root_progress.end();
+        std.debug.print("\t[*]Parsing the scene...\n", .{});
+        if (data.scene) |main_scene| {
+            std.debug.print("Scene has {d} nodes\n", .{main_scene.nodes_count});
+            if (main_scene.nodes) |nodes| {
+                var scene_progress = root_progress.start("Parsing the scene", main_scene.nodes_count);
+                for (nodes[0..main_scene.nodes_count]) |node| {
+                    const root_node: *zmesh.io.zcgltf.Node = node;
+                    try self.load_node(root_node, allocator, scene_progress);
+                }
+                scene_progress.end();
+            }
+        } else {
+            log.err("failed to find a main scene for gltf file: {s}", .{self.path});
+            return error.NoMainSceneFound;
+        }
+    }
+
+    fn load_root_mesh(self: *Model, data: *zmesh.io.zcgltf.Data, allocator: std.mem.Allocator) !void {
+        var mesh_indices = std.ArrayList(u32).init(allocator);
+        var mesh_positions = std.ArrayList([3]f32).init(allocator);
+        var mesh_normals = std.ArrayList([3]f32).init(allocator);
+
+        try zmesh.io.zcgltf.appendMeshPrimitive(
+            data,
+            0, // mesh index
+            0, // gltf primitive index (submesh index)
+            &mesh_indices,
+            &mesh_positions,
+            &mesh_normals, // normals (optional)
+            null, // texcoords (optional)
+            null, // tangents (optional)
+        );
+
+        _ = self;
+        // FIXME:
+        // self.meshes.append(Mesh.init(
+        //     try mesh_indices.toOwnedSlice(),
+        //     try mesh_positions.toOwnedSlice(),
+        //     try mesh_normals.toOwnedSlice(),
+        //     undefined,
+        // ));
     }
 
     fn load_node(
+        self: *Model,
         node: *zmesh.io.zcgltf.Node,
-        meshes: *std.ArrayList(Mesh),
         allocator: std.mem.Allocator,
         progress_node: std.Progress.Node,
     ) !void {
         if (node.mesh) |mesh| {
-            try meshes.append(try Model.process_mesh(mesh, allocator, progress_node));
+            try self.meshes.append(try self.process_mesh(mesh, allocator, progress_node));
         }
         if (node.children) |children| {
+            std.debug.print("Node has {d} children\n", .{node.children_count});
             for (0..node.children_count) |i| {
-                try Model.load_node(children[i], meshes, allocator, progress_node);
+                try self.load_node(children[i], allocator, progress_node);
             }
         }
     }
 
-    pub fn process_mesh(
+    fn process_mesh(
+        self: *Model,
         mesh: *zmesh.io.zcgltf.Mesh,
         allocator: std.mem.Allocator,
         progress_node: std.Progress.Node,
@@ -298,19 +334,19 @@ pub const Model = struct {
                             _ = attr.data.readFloat(i, &vertex.normal);
                         },
                         .tangent => {
-                            log.err("tangent attributes not implemented.", .{});
+                            // log.err("tangent attributes not implemented.", .{});
                         },
                         .texcoord => {
                             _ = attr.data.readFloat(i, &vertex.texture_coords);
                         },
                         .color => {
-                            log.err("color attributes not implemented.", .{});
+                            // log.err("color attributes not implemented.", .{});
                         },
                         .joints => {
-                            log.err("joints attributes not implemented.", .{});
+                            // log.err("joints attributes not implemented.", .{});
                         },
                         .weights => {
-                            log.err("weights attributes not implemented.", .{});
+                            // log.err("weights attributes not implemented.", .{});
                         },
                         else => {
                             log.err("can't handle this type of attribute: {s}\n", .{attr.name orelse "empty"});
@@ -325,19 +361,14 @@ pub const Model = struct {
                     // INFO: It seems to also support PBR specular-glossiness with our
                     // familiar diffuse and specular maps! Hooray
                     std.debug.print("Material is PBRspecularGlossiness\n", .{});
-                    // material.pbr_specular_glossiness.diffuse_factor;
-                    // material.pbr_specular_glossiness.diffuse_texture;
-                    // material.pbr_specular_glossiness.specular_factor;
-                    // material.pbr_specular_glossiness.glossiness_factor;
-                    // material.pbr_specular_glossiness.specular_glossiness_texture;
                     if (material.pbr_specular_glossiness.diffuse_texture.texture) |tex| {
-                        try textures.append(Model.load_texture(tex, .diffuse));
+                        try textures.append(try self.load_texture(tex, .diffuse, allocator));
                         std.debug.print("Material diffuse color is a texture\n", .{});
                     } else {
                         std.debug.print("material diffuse color is a factor\n", .{});
                     }
                     if (material.pbr_specular_glossiness.specular_glossiness_texture.texture) |tex| {
-                        try textures.append(Model.load_texture(tex, .specular));
+                        try textures.append(try self.load_texture(tex, .specular, allocator));
                         std.debug.print("Material specular-glossiness is a texture\n", .{});
                     } else {
                         std.debug.print("material specular-glossiness are factors\n", .{});
@@ -348,15 +379,14 @@ pub const Model = struct {
                     // Each property's value can be defined either as a) a factor between
                     // 0.0 and 1.0, or b) a texture.
                     std.debug.print("Material is PBRmetallicRoughness\n", .{});
-                    // material.pbr_metallic_roughness.base_color_factor;
                     if (material.pbr_metallic_roughness.base_color_texture.texture) |tex| {
-                        try textures.append(Model.load_texture(tex, .base_color));
+                        try textures.append(try self.load_texture(tex, .base_color, allocator));
                         std.debug.print("Material base color is a texture\n", .{});
                     } else {
                         std.debug.print("material base color is a factor\n", .{});
                     }
                     if (material.pbr_metallic_roughness.metallic_roughness_texture.texture) |tex| {
-                        try textures.append(Model.load_texture(tex, .metalic_roughness));
+                        try textures.append(try self.load_texture(tex, .metalic_roughness, allocator));
                         std.debug.print("Material metalic roughness is a texture\n", .{});
                     } else {
                         std.debug.print("material metallic rougness are factors\n", .{});
@@ -374,9 +404,17 @@ pub const Model = struct {
         );
     }
 
-    fn load_texture(gltf_texture: *zmesh.io.zcgltf.Texture, texture_type: texture.TextureType) texture.Texture {
-        std.debug.print("Loading texture '{s}'...\n", .{gltf_texture.name orelse "noname"});
-        return texture.Texture{ .id = undefined, .type_ = texture_type };
+    fn load_texture(
+        self: *Model,
+        gltf_texture: *zmesh.io.zcgltf.Texture,
+        texture_type: texture.TextureType,
+        allocator: std.mem.Allocator,
+    ) !texture.Texture {
+        std.debug.print("Loading texture '{s}'...\n", .{gltf_texture.image.?.name orelse "noname"});
+        // TODO: Use the loaded_textures hashmap!
+        var text_out = try texture.load_from_gltf(gltf_texture, self.directory, allocator);
+        text_out.type_ = texture_type;
+        return text_out;
     }
 
     pub fn draw(self: Model, shader_program: core.ShaderProgram) !void {

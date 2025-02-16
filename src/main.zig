@@ -76,8 +76,16 @@ pub fn main() !void {
     // ===================================================================================
     // ============================ VBOS, VAOs, and VEOs =================================
     // _ = try model.Model.init("/Users/cactus/Code/learning-opengl/assets/dude.glb", allocator);
-    // const my_model = try model.Model.init("/Users/cactus/Code/learning-opengl/assets/guitar-backpack/scene.gltf", allocator);
-    const my_model = try model.Model.init("/Users/cactus/Code/learning-opengl/assets/cube/cube.glb", allocator);
+    const my_model = try model.Model.init(
+        "/Users/cactus/Code/learning-opengl/assets/guitar-backpack/scene.gltf",
+        allocator,
+        .load_entire_scene,
+    );
+    // const my_model = try model.Model.init(
+    //     "/Users/cactus/Code/learning-opengl/assets/cube/cube.glb",
+    //     allocator,
+    //     .load_root_mesh_only,
+    // );
     defer my_model.deinit(allocator);
     std.debug.print("Model loaded! Drawing...\n", .{});
 
