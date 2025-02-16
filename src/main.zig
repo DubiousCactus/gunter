@@ -76,8 +76,13 @@ pub fn main() !void {
     // ===================================================================================
     // ============================ VBOS, VAOs, and VEOs =================================
     // _ = try model.Model.init("/Users/cactus/Code/learning-opengl/assets/dude.glb", allocator);
+    // const my_model = try model.Model.init(
+    //     "/Users/cactus/Code/learning-opengl/assets/guitar-backpack/scene.gltf",
+    //     allocator,
+    //     .load_entire_scene,
+    // );
     const my_model = try model.Model.init(
-        "/Users/cactus/Code/learning-opengl/assets/guitar-backpack/scene.gltf",
+        "/Users/cactus/Code/learning-opengl/assets/dog/scene.gltf",
         allocator,
         .load_entire_scene,
     );

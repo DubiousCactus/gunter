@@ -59,7 +59,9 @@ pub fn load_from_file(
 ) !void {
     var image = try zigimg.Image.fromFile(allocator, @constCast(&file));
     errdefer image.deinit();
-    gl.ActiveTexture(gl_location);
+    defer image.deinit();
+    _ = gl_location;
+    // gl.ActiveTexture(gl_location);
     gl.BindTexture(gl_texture_type, TBO);
     // TODO: Clarify where it gets bound. in the active texture or in the bound buffer
     // object??
@@ -76,7 +78,6 @@ pub fn load_from_file(
     );
     if (generate_mipmap)
         gl.GenerateMipmap(gl.TEXTURE_2D);
-    image.deinit();
 }
 
 pub fn load_from_gltf(

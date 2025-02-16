@@ -100,18 +100,20 @@ pub const Mesh = struct {
         var texture_mat = core.TextureMaterial{
             .diffuse_texture_index = undefined,
             .specular_texture_index = undefined,
-            .shininess = 1,
+            .shininess = 10,
         };
         for (self.textures, 0..) |tex, i| {
             gl.ActiveTexture(gl.TEXTURE0 + @as(c_uint, @intCast(i)));
+            std.debug.print("Activating texture {d}+{d}={d}\n", .{ gl.TEXTURE0, i, gl.TEXTURE0 + @as(c_uint, @intCast(i)) });
             gl.BindTexture(gl.TEXTURE_2D, tex.id);
+            std.debug.print("Binding 2D texture {d}\n", .{tex.id});
             switch (tex.type_) {
                 .diffuse, .base_color => {
                     if (diffuse_nr > 1) {
                         std.debug.print("Hey man we don't handle multiple textures per material. Only 1 diffuse and 1 specular allowed bro it's what it is.\n", .{});
                         return error.TooManyTextures;
                     }
-                    texture_mat.diffuse_texture_index = @as(i32, @intCast(tex.id));
+                    texture_mat.diffuse_texture_index = @as(i32, @intCast(i));
                     diffuse_nr += 1;
                 },
                 .specular, .metalic_roughness => {
@@ -119,17 +121,22 @@ pub const Mesh = struct {
                         std.debug.print("Hey man we don't handle multiple textures per material. Only 1 diffuse and 1 specular allowed bro it's what it is.\n", .{});
                         return error.TooManyTextures;
                     }
-                    texture_mat.specular_texture_index = @as(i32, @intCast(tex.id));
+                    texture_mat.specular_texture_index = @as(i32, @intCast(i));
                     specular_nr += 1;
                 },
             }
         }
         // // TODO: Where do we store the shininess during model loading?
         try shader_program.setTextureMaterial(texture_mat);
-        // gl.ActiveTexture(gl.TEXTURE0); // TODO: Is this needed? Why?
+        // try shader_program.setTextureMaterial(core.TextureMaterial{
+        //     .diffuse_texture_index = 0,
+        //     .specular_texture_index = 1,
+        //     .shininess = 32,
+        // });
         gl.BindVertexArray(self.VAO);
         gl.DrawElements(gl.TRIANGLES, @as(c_int, @intCast(self.indices.len)), gl.UNSIGNED_INT, 0);
         gl.BindVertexArray(0); // Unbind for good measures!
+        gl.ActiveTexture(gl.TEXTURE0); // Reset for good measures!
     }
 
     pub fn deinit(self: Mesh, allocator: std.mem.Allocator) void {
