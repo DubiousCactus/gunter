@@ -193,7 +193,7 @@ pub const SkyBox = struct {
             log.err("failed to open skybox directory: {?s}", .{directory});
             return err;
         };
-        const file_names: []const []const u8 = &.{ // TODO: What's this & syntax again? lol
+        const file_names: []const []const u8 = &.{
             // it's the adress of you idiot.
             "right.png",
             "left.png",
@@ -210,15 +210,14 @@ pub const SkyBox = struct {
             };
             try texture.load_from_file(
                 file,
-                gl.TEXTURE0,
                 gl.TEXTURE_CUBE_MAP,
                 tbo,
                 gl.TEXTURE_CUBE_MAP_POSITIVE_X + @as(c_uint, @intCast(i)),
-                false,
+                false, // NOTE: Make sure to not use mipmaps for the skybox!
                 allocator,
             );
         }
-        gl.TexParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.TexParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MIN_FILTER, gl.LINEAR); // NOTE: Make sure to not use mipmaps for the skybox!
         gl.TexParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
         gl.TexParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.TexParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);

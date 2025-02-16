@@ -18,6 +18,7 @@ pub const Texture = struct {
     id: c_uint,
     type_: TextureType,
     path: [*:0]const u8,
+    use_mipmaps: bool,
 };
 
 pub const TextureError = error{
@@ -26,7 +27,6 @@ pub const TextureError = error{
 
 pub fn load_from_path(
     file_name: []const u8,
-    gl_location: c_uint,
     gl_texture_type: c_uint,
     TBO: c_uint,
     target: c_uint,
@@ -37,9 +37,8 @@ pub fn load_from_path(
         log.err("failed to open texture file: {?s}", .{file_name});
         return err;
     };
-    return try Texture.load_from_file(
+    return try load_from_file(
         file,
-        gl_location,
         gl_texture_type,
         TBO,
         target,
@@ -50,7 +49,6 @@ pub fn load_from_path(
 
 pub fn load_from_file(
     file: std.fs.File,
-    gl_location: c_uint,
     gl_texture_type: c_uint,
     TBO: c_uint,
     target: c_uint,
@@ -60,8 +58,6 @@ pub fn load_from_file(
     var image = try zigimg.Image.fromFile(allocator, @constCast(&file));
     errdefer image.deinit();
     defer image.deinit();
-    _ = gl_location;
-    // gl.ActiveTexture(gl_location);
     gl.BindTexture(gl_texture_type, TBO);
     // TODO: Clarify where it gets bound. in the active texture or in the bound buffer
     // object??
@@ -93,8 +89,10 @@ pub fn load_from_gltf(
 
     var tbo: [1]c_uint = undefined;
     gl.GenTextures(1, &tbo);
+    std.debug.print("Generated texture buffer object with id={d}\n", .{tbo[0]});
 
     var path: [*:0]const u8 = undefined;
+    var use_mipmaps: bool = false;
 
     if (tex.image.?.uri) |image_uri| {
         path = image_uri;
@@ -107,7 +105,8 @@ pub fn load_from_gltf(
             log.err("failed to open texture file: {?s}", .{image_uri});
             return err;
         };
-        try load_from_file(file, gl.TEXTURE0, gl.TEXTURE_2D, tbo[0], gl.TEXTURE_2D, false, allocator);
+        use_mipmaps = true;
+        try load_from_file(file, gl.TEXTURE_2D, tbo[0], gl.TEXTURE_2D, use_mipmaps, allocator);
     } else if (tex.image.?.buffer_view) |buffer_view| {
         std.debug.print("Loading texture from buffer view\n", .{});
         std.debug.print("Loading {d} bytes\n", .{buffer_view.size});
@@ -130,6 +129,12 @@ pub fn load_from_gltf(
     } else if (tex.image.?.extras.data) |image_data| {
         std.debug.print("Loading texture from data\n", .{});
         _ = image_data;
+        return error.NotImplementedError;
     }
-    return .{ .id = tbo[0], .path = path, .type_ = undefined };
+    return .{
+        .id = tbo[0],
+        .path = path,
+        .type_ = undefined,
+        .use_mipmaps = use_mipmaps,
+    };
 }

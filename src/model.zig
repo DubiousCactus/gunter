@@ -1,5 +1,4 @@
 const zmesh = @import("zmesh");
-const zm = @import("zm");
 const gl = @import("gl");
 const std = @import("std");
 
@@ -23,7 +22,7 @@ pub const Mesh = struct {
     VBO: c_uint,
     EBO: c_uint,
 
-    pub fn init(indices: []gl.uint, vertices: []Vertex, textures: []texture.Texture) Mesh {
+    pub fn init(indices: []gl.uint, vertices: []Vertex, textures: []texture.Texture) !Mesh {
         var VAO: [1]c_uint = undefined;
         var VBO: [1]c_uint = undefined;
         var EBO: [1]c_uint = undefined;
@@ -92,21 +91,23 @@ pub const Mesh = struct {
         // TODO: Move the texture parameters somewhere else!
         gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.MIRRORED_REPEAT);
         gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.MIRRORED_REPEAT);
-        gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
         gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
         // TODO: Handle more than one texture per material!
         var diffuse_nr: u8 = 1;
         var specular_nr: u8 = 1;
+        // FIXME: Things start to break if the texture indices are beyond activated
+        // textures. But what if I don't have the diffuse or the specular?
         var texture_mat = core.TextureMaterial{
-            .diffuse_texture_index = undefined,
-            .specular_texture_index = undefined,
-            .shininess = 10,
+            .diffuse_texture_index = 0,
+            .specular_texture_index = 1,
+            .shininess = 1,
         };
         for (self.textures, 0..) |tex, i| {
+            // WARN: Reflect the use of mipmaps with the choice of generating mipmaps in
+            // the texture loading!! This is super important or it won't render textures.
+            gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, if (tex.use_mipmaps) gl.LINEAR_MIPMAP_LINEAR else gl.LINEAR);
             gl.ActiveTexture(gl.TEXTURE0 + @as(c_uint, @intCast(i)));
-            std.debug.print("Activating texture {d}+{d}={d}\n", .{ gl.TEXTURE0, i, gl.TEXTURE0 + @as(c_uint, @intCast(i)) });
             gl.BindTexture(gl.TEXTURE_2D, tex.id);
-            std.debug.print("Binding 2D texture {d}\n", .{tex.id});
             switch (tex.type_) {
                 .diffuse, .base_color => {
                     if (diffuse_nr > 1) {
@@ -126,13 +127,8 @@ pub const Mesh = struct {
                 },
             }
         }
-        // // TODO: Where do we store the shininess during model loading?
+        // // // TODO: Where do we store the shininess during model loading?
         try shader_program.setTextureMaterial(texture_mat);
-        // try shader_program.setTextureMaterial(core.TextureMaterial{
-        //     .diffuse_texture_index = 0,
-        //     .specular_texture_index = 1,
-        //     .shininess = 32,
-        // });
         gl.BindVertexArray(self.VAO);
         gl.DrawElements(gl.TRIANGLES, @as(c_int, @intCast(self.indices.len)), gl.UNSIGNED_INT, 0);
         gl.BindVertexArray(0); // Unbind for good measures!
@@ -416,7 +412,7 @@ pub const Model = struct {
             mesh_prim_progress.setCompletedItems(k);
         }
         std.debug.print("Initializing Mesh with {d} vertices...\n", .{vertices.items.len});
-        return Mesh.init(
+        return try Mesh.init(
             try indices.toOwnedSlice(),
             try vertices.toOwnedSlice(),
             try textures.toOwnedSlice(),
@@ -429,7 +425,7 @@ pub const Model = struct {
         texture_type: texture.TextureType,
         allocator: std.mem.Allocator,
     ) !texture.Texture {
-        std.debug.print("Loading texture '{s}'...\n", .{gltf_texture.image.?.name orelse "noname"});
+        std.debug.print("Loading texture '{s}' of type {}...\n", .{ gltf_texture.image.?.name orelse "noname", texture_type });
         // TODO: Use the loaded_textures hashmap!
         var text_out = try texture.load_from_gltf(gltf_texture, self.directory, allocator);
         text_out.type_ = texture_type;
