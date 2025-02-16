@@ -12,6 +12,7 @@ const log = std.log;
 const core = @import("core.zig");
 const scene = @import("scene.zig");
 const model = @import("model.zig");
+const input = @import("input.zig");
 
 const screen_w = 1920;
 const screen_h = 1080;
@@ -26,12 +27,12 @@ pub fn main() !void {
     defer context.destroy(allocator);
     var ticker = try core.Ticker.init();
     var camera = scene.Camera{ .translation = zm.Vec3f{ 0, 0, -3 }, .ticker = &ticker };
-    var input_handler = scene.InputHandler.init(&camera);
+    var input_handler = input.InputHandler.init(&camera);
 
     context.window.setUserPointer(&input_handler);
     context.window.setCursorPosCallback(struct {
         fn anonymous_callback(window: glfw.Window, x: f64, y: f64) void {
-            const user_ptr = window.getUserPointer(scene.InputHandler);
+            const user_ptr = window.getUserPointer(input.InputHandler);
             if (user_ptr != null) {
                 user_ptr.?.mouseCallback(x, y);
             }
@@ -39,7 +40,7 @@ pub fn main() !void {
     }.anonymous_callback);
     context.window.setKeyCallback(struct {
         fn anonymous_callback(window: glfw.Window, key: glfw.Key, scancode: i32, action: glfw.Action, mods: glfw.Mods) void {
-            const user_ptr = window.getUserPointer(scene.InputHandler);
+            const user_ptr = window.getUserPointer(input.InputHandler);
             if (user_ptr != null) {
                 user_ptr.?.keyCallback(window, key, scancode, action, mods);
             }
@@ -72,12 +73,6 @@ pub fn main() !void {
         "shaders/fragment_shader_multilight_textured.glsl",
     );
     defer multilight_textured_shader_program.delete();
-    const skybox_shader_program: core.ShaderProgram = try core.ShaderProgram.init(
-        allocator,
-        "shaders/vertex_shader_skybox.glsl",
-        "shaders/fragment_shader_skybox.glsl",
-    );
-    defer skybox_shader_program.delete();
     // ===================================================================================
     // ============================ VBOS, VAOs, and VEOs =================================
     // _ = try model.Model.init("/Users/cactus/Code/learning-opengl/assets/dude.glb", allocator);
@@ -86,15 +81,6 @@ pub fn main() !void {
     defer my_model.deinit(allocator);
     std.debug.print("Model loaded! Drawing...\n", .{});
 
-    // const model_mat: zm.Mat4f = zm.Mat4f.multiply(
-    //     zm.Mat4f.fromQuaternion(
-    //         zm.Quaternionf.fromAxisAngle(
-    //             zm.Vec3f{ 1.0, 0.0, 0.0 },
-    //             std.math.degreesToRadians(-55.0),
-    //         ),
-    //     ),
-    //     zm.Mat4f.scaling(1.0, 1.0, 1.0),
-    // );
     const model_mat = zm.Mat4f.identity();
     const projection_mat = zm.Mat4f.perspective(45, 1, 0.1, 1000);
     const point_lights = [_]zm.Vec3f{
@@ -105,119 +91,8 @@ pub fn main() !void {
     };
     std.debug.print("Done!\n", .{});
 
-    std.debug.print("\t[*] Skybox data...\n", .{});
-
-    var VAOs: [1]c_uint = undefined;
-    gl.GenVertexArrays(1, &VAOs);
-    defer gl.DeleteVertexArrays(1, &VAOs);
-    const skybox_vao = VAOs[0];
-
-    var VBOs: [1]c_uint = undefined;
-    gl.GenBuffers(1, &VBOs);
-    defer gl.DeleteBuffers(1, &VBOs);
-    const skybox_vbo: c_uint = VBOs[0];
-    // Texture buffers:
-    var TBOs: [1]c_uint = undefined;
-    gl.GenTextures(1, &TBOs);
-    defer gl.DeleteTextures(1, &TBOs);
-    const cubemap_tbo: c_uint = TBOs[0];
-
-    const skybox_cube_verts = [_]gl.float{
-        -1.0, 1.0,  -1.0,
-        -1.0, -1.0, -1.0,
-        1.0,  -1.0, -1.0,
-        1.0,  -1.0, -1.0,
-        1.0,  1.0,  -1.0,
-        -1.0, 1.0,  -1.0,
-
-        -1.0, -1.0, 1.0,
-        -1.0, -1.0, -1.0,
-        -1.0, 1.0,  -1.0,
-        -1.0, 1.0,  -1.0,
-        -1.0, 1.0,  1.0,
-        -1.0, -1.0, 1.0,
-
-        1.0,  -1.0, -1.0,
-        1.0,  -1.0, 1.0,
-        1.0,  1.0,  1.0,
-        1.0,  1.0,  1.0,
-        1.0,  1.0,  -1.0,
-        1.0,  -1.0, -1.0,
-
-        -1.0, -1.0, 1.0,
-        -1.0, 1.0,  1.0,
-        1.0,  1.0,  1.0,
-        1.0,  1.0,  1.0,
-        1.0,  -1.0, 1.0,
-        -1.0, -1.0, 1.0,
-
-        -1.0, 1.0,  -1.0,
-        1.0,  1.0,  -1.0,
-        1.0,  1.0,  1.0,
-        1.0,  1.0,  1.0,
-        -1.0, 1.0,  1.0,
-        -1.0, 1.0,  -1.0,
-
-        -1.0, -1.0, -1.0,
-        -1.0, -1.0, 1.0,
-        1.0,  -1.0, -1.0,
-        1.0,  -1.0, -1.0,
-        -1.0, -1.0, 1.0,
-        1.0,  -1.0, 1.0,
-    };
-
-    // Creating a skybox
-    gl.BindVertexArray(skybox_vao);
-    // defer gl.BindVertexArray(0);
-    gl.BindBuffer(gl.ARRAY_BUFFER, skybox_vbo);
-    // defer gl.BindBuffer(gl.ARRAY_BUFFER, 0);
-    gl.BufferData(gl.ARRAY_BUFFER, @sizeOf(gl.float) * skybox_cube_verts.len, &skybox_cube_verts, gl.STATIC_DRAW);
-    gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 3 * @sizeOf(gl.float), 0);
-    gl.EnableVertexAttribArray(0);
-    gl.ActiveTexture(gl.TEXTURE0);
-    gl.BindTexture(gl.TEXTURE_CUBE_MAP, cubemap_tbo); // Binds to the active texture
-    // unit
-    const skybox_dir = std.fs.cwd().openDir("textures/skybox", .{}) catch |err| {
-        log.err("failed to open skybox directory: {?s}", .{"textures/skybox"});
-        return err;
-    };
-    const file_names: []const []const u8 = &.{ // TODO: What's this & syntax again? lol
-        // it's the adress of you idiot.
-        "right.png",
-        "left.png",
-        "top.png",
-        "bottom.png",
-        "front.png",
-        "back.png",
-    };
-    var file: ?std.fs.File = undefined;
-    for (file_names, 0..) |file_name, i| {
-        file = skybox_dir.openFile(file_name, .{}) catch |err| {
-            log.err("failed to open skybox file: {?s}", .{file_name});
-            return err;
-        };
-        var image = try zigimg.Image.fromFile(allocator, &file.?);
-        errdefer image.deinit();
-        gl.TexImage2D(
-            gl.TEXTURE_CUBE_MAP_POSITIVE_X + @as(c_uint, @intCast(i)),
-            0,
-            gl.RGB,
-            @as(c_int, @intCast(image.width)),
-            @as(c_int, @intCast(image.height)),
-            0,
-            if (image.pixelFormat().isRgba()) gl.RGBA else gl.RGB,
-            gl.UNSIGNED_BYTE,
-            image.rawBytes().ptr,
-        );
-        image.deinit();
-    }
-    gl.TexParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.TexParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.TexParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.TexParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.TexParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE);
-    skybox_shader_program.use();
-    try skybox_shader_program.setInt("cubemap", 0); // Set the uniform to the texture unit
+    const skybox = try scene.SkyBox.init(allocator, "textures/skybox");
+    defer skybox.deinit();
 
     gl.ClearColor(0.0, 0.0, 0.0, 1);
     var active_shader_program: core.ShaderProgram = multilight_textured_shader_program;
@@ -227,17 +102,7 @@ pub fn main() !void {
         input_handler.consume(context.window);
         ticker.tick();
 
-        gl.DepthFunc(gl.LEQUAL); // Change depth function so depth test passes when values are equal to depth buffer's content
-        // gl.DepthMask(gl.FALSE); // Disable depth writing so we don't need to worry about
-        // the scale of the skybox!
-        skybox_shader_program.use();
-        try skybox_shader_program.setMat4f("u_view", camera.getSkyboxViewMat(), true);
-        // try skybox_shader_program.setMat4f("u_view", zm.Mat4f.identity(), true);
-        try skybox_shader_program.setMat4f("u_proj", projection_mat, true);
-        gl.BindVertexArray(skybox_vao);
-        gl.DrawArrays(gl.TRIANGLES, 0, 36);
-        // gl.DepthMask(gl.TRUE);
-        gl.DepthFunc(gl.LESS); // Set depth function back to default
+        try skybox.draw(camera.getSkyboxViewMat(), projection_mat);
 
         multilight_textured_shader_program.use();
         active_shader_program = multilight_textured_shader_program;

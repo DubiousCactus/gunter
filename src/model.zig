@@ -53,8 +53,8 @@ pub const Mesh = struct {
         gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, EBO[0]);
         gl.BufferData(
             gl.ELEMENT_ARRAY_BUFFER,
-            @sizeOf(gl.uint) * indices.len,
-            &indices,
+            @sizeOf(gl.uint) * @as(isize, @intCast(indices.len)),
+            indices.ptr,
             gl.STATIC_DRAW,
         );
 

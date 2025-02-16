@@ -114,65 +114,157 @@ pub const Camera = struct {
     }
 };
 
-pub const InputHandler = struct {
-    cam: *Camera,
-    scene: Scene = .no_skybox_textured,
+pub const SkyBox = struct {
+    shader_program: core.ShaderProgram,
+    skybox_cube_verts: []const gl.float,
+    VAO: c_uint,
+    VBO: c_uint,
+    TBO: c_uint,
 
-    pub const Scene = union(enum) {
-        skybox,
-        no_skybox_raw,
-        no_skybox_textured,
-        no_skybox_textured_spotlight,
-        no_skybox_textured_multilight,
-    };
+    pub fn init(allocator: std.mem.Allocator, directory: []const u8) !SkyBox {
+        // TODO: Make a default hardcoded shader program and accept a path to a custom
+        // one!
+        const skybox_shader_program: core.ShaderProgram = try core.ShaderProgram.init(
+            allocator,
+            "shaders/vertex_shader_skybox.glsl",
+            "shaders/fragment_shader_skybox.glsl",
+        );
+        var VAOs: [1]c_uint = undefined;
+        gl.GenVertexArrays(1, &VAOs);
+        const vao = VAOs[0];
 
-    pub fn init(cam: *Camera) InputHandler {
-        return .{ .cam = cam };
-    }
+        var VBOs: [1]c_uint = undefined;
+        gl.GenBuffers(1, &VBOs);
+        const vbo: c_uint = VBOs[0];
+        // Texture buffers:
+        var TBOs: [1]c_uint = undefined;
+        gl.GenTextures(1, &TBOs);
+        const tbo: c_uint = TBOs[0];
 
-    pub fn mouseCallback(self: *InputHandler, x: f64, y: f64) void {
-        self.cam.mouseCallback(x, y);
-    }
+        const skybox_cube_verts = [_]gl.float{
+            -1.0, 1.0,  -1.0,
+            -1.0, -1.0, -1.0,
+            1.0,  -1.0, -1.0,
+            1.0,  -1.0, -1.0,
+            1.0,  1.0,  -1.0,
+            -1.0, 1.0,  -1.0,
 
-    pub fn keyCallback(self: *InputHandler, window: glfw.Window, key: glfw.Key, scancode: i32, action: glfw.Action, mods: glfw.Mods) void {
-        _ = scancode;
-        _ = mods;
+            -1.0, -1.0, 1.0,
+            -1.0, -1.0, -1.0,
+            -1.0, 1.0,  -1.0,
+            -1.0, 1.0,  -1.0,
+            -1.0, 1.0,  1.0,
+            -1.0, -1.0, 1.0,
 
-        if (action == .press) {
-            switch (key) {
-                .q => window.setShouldClose(true),
-                .one => {
-                    self.scene = .skybox;
-                },
-                .two => {
-                    self.scene = .no_skybox_raw;
-                },
-                .three => {
-                    self.scene = .no_skybox_textured;
-                },
-                .four => {
-                    self.scene = .no_skybox_textured_spotlight;
-                },
-                .five => {
-                    self.scene = .no_skybox_textured_multilight;
-                },
-                else => {},
-            }
+            1.0,  -1.0, -1.0,
+            1.0,  -1.0, 1.0,
+            1.0,  1.0,  1.0,
+            1.0,  1.0,  1.0,
+            1.0,  1.0,  -1.0,
+            1.0,  -1.0, -1.0,
+
+            -1.0, -1.0, 1.0,
+            -1.0, 1.0,  1.0,
+            1.0,  1.0,  1.0,
+            1.0,  1.0,  1.0,
+            1.0,  -1.0, 1.0,
+            -1.0, -1.0, 1.0,
+
+            -1.0, 1.0,  -1.0,
+            1.0,  1.0,  -1.0,
+            1.0,  1.0,  1.0,
+            1.0,  1.0,  1.0,
+            -1.0, 1.0,  1.0,
+            -1.0, 1.0,  -1.0,
+
+            -1.0, -1.0, -1.0,
+            -1.0, -1.0, 1.0,
+            1.0,  -1.0, -1.0,
+            1.0,  -1.0, -1.0,
+            -1.0, -1.0, 1.0,
+            1.0,  -1.0, 1.0,
+        };
+        // Creating a skybox
+        gl.BindVertexArray(vao);
+        gl.BindBuffer(gl.ARRAY_BUFFER, vbo);
+        gl.BufferData(gl.ARRAY_BUFFER, @sizeOf(gl.float) * skybox_cube_verts.len, &skybox_cube_verts, gl.STATIC_DRAW);
+        gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 3 * @sizeOf(gl.float), 0);
+        gl.EnableVertexAttribArray(0);
+        gl.ActiveTexture(gl.TEXTURE0);
+        gl.BindTexture(gl.TEXTURE_CUBE_MAP, tbo); // Binds to the active texture unit
+        // TODO: Refactor texture loading
+        const skybox_dir = std.fs.cwd().openDir(directory, .{}) catch |err| {
+            log.err("failed to open skybox directory: {?s}", .{directory});
+            return err;
+        };
+        const file_names: []const []const u8 = &.{ // TODO: What's this & syntax again? lol
+            // it's the adress of you idiot.
+            "right.png",
+            "left.png",
+            "top.png",
+            "bottom.png",
+            "front.png",
+            "back.png",
+        };
+        var file: ?std.fs.File = undefined;
+        for (file_names, 0..) |file_name, i| {
+            file = skybox_dir.openFile(file_name, .{}) catch |err| {
+                log.err("failed to open skybox file: {?s}", .{file_name});
+                return err;
+            };
+            var image = try zigimg.Image.fromFile(allocator, &file.?);
+            errdefer image.deinit();
+            gl.TexImage2D(
+                gl.TEXTURE_CUBE_MAP_POSITIVE_X + @as(c_uint, @intCast(i)),
+                0,
+                gl.RGB,
+                @as(c_int, @intCast(image.width)),
+                @as(c_int, @intCast(image.height)),
+                0,
+                if (image.pixelFormat().isRgba()) gl.RGBA else gl.RGB,
+                gl.UNSIGNED_BYTE,
+                image.rawBytes().ptr,
+            );
+            image.deinit();
         }
-        // TODO: It would be very nice to be able to hook any functions with a given key
-        // + action, so that we can do anything from user code without touching the
-        // input handler. For this we would need a Map of .{keycode, action} -> comptime fn or something like that.
+        gl.TexParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.TexParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.TexParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.TexParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.TexParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE);
+        skybox_shader_program.use();
+        try skybox_shader_program.setInt("cubemap", 0); // Set the uniform to the texture unit
+        return .{
+            .shader_program = skybox_shader_program,
+            .skybox_cube_verts = &skybox_cube_verts,
+            .VAO = vao,
+            .VBO = vbo,
+            .TBO = tbo,
+        };
     }
 
-    pub fn consume(self: *InputHandler, window: glfw.Window) void {
-        if (window.getKey(.w) == .press) {
-            self.cam.moveFwd();
-        } else if (window.getKey(.s) == .press) {
-            self.cam.moveBck();
-        } else if (window.getKey(.a) == .press) {
-            self.cam.moveLeft();
-        } else if (window.getKey(.d) == .press) {
-            self.cam.moveRight();
-        }
+    pub fn draw(self: SkyBox, camera_view_mat: zm.Mat4f, projection_mat: zm.Mat4f) !void {
+        gl.DepthFunc(gl.LEQUAL); // Change depth function so depth test passes when values are equal to depth buffer's content
+        // gl.DepthMask(gl.FALSE); // Disable depth writing so we don't need to worry about
+        // the scale of the skybox!
+        self.shader_program.use();
+        try self.shader_program.setMat4f("u_view", camera_view_mat, true);
+        try self.shader_program.setMat4f("u_proj", projection_mat, true);
+        gl.BindVertexArray(self.VAO);
+        gl.DrawArrays(gl.TRIANGLES, 0, 36);
+        // gl.DepthMask(gl.TRUE);
+        gl.DepthFunc(gl.LESS); // Set depth function back to default
+        gl.BindVertexArray(0);
+    }
+
+    pub fn deinit(self: SkyBox) void {
+        // TODO: Deinit VAOS, VBOS, TBOS
+        self.shader_program.delete();
+        var buffer: [1]c_uint = .{self.VBO};
+        var vao: [1]c_uint = .{self.VAO};
+        var tbo: [1]c_uint = .{self.TBO};
+        gl.DeleteBuffers(1, &buffer);
+        gl.DeleteVertexArrays(1, &vao);
+        gl.DeleteTextures(1, &tbo);
     }
 };
