@@ -194,15 +194,17 @@ pub const Model = struct {
         var root_progress = std.Progress.start(.{});
         defer root_progress.end();
         std.debug.print("\t[*]Parsing the scene...\n", .{});
+        var scene_progress = root_progress.start("Parsing the scene", 0);
+        defer scene_progress.end();
         if (data.scene) |main_scene| {
             std.debug.print("Scene has {d} nodes\n", .{main_scene.nodes_count});
             if (main_scene.nodes) |nodes| {
-                var scene_progress = root_progress.start("Parsing the scene", main_scene.nodes_count);
+                var nodes_progress = scene_progress.start("Loading nodes", main_scene.nodes_count);
+                defer nodes_progress.end();
                 for (nodes[0..main_scene.nodes_count]) |node| {
                     const root_node: *zmesh.io.zcgltf.Node = node;
-                    try self.load_node(root_node, allocator, scene_progress);
+                    try self.load_node(root_node, allocator, nodes_progress);
                 }
-                scene_progress.end();
             }
         } else {
             log.err("failed to find a main scene for gltf file: {s}", .{self.path});
@@ -244,9 +246,11 @@ pub const Model = struct {
     ) !void {
         if (node.mesh) |mesh| {
             try self.meshes.append(try self.process_mesh(mesh, allocator, progress_node));
+            progress_node.setCompletedItems(self.meshes.items.len);
         }
         if (node.children) |children| {
             std.debug.print("Node has {d} children\n", .{node.children_count});
+            progress_node.increaseEstimatedTotalItems(node.children_count);
             for (0..node.children_count) |i| {
                 try self.load_node(children[i], allocator, progress_node);
             }
@@ -270,7 +274,7 @@ pub const Model = struct {
         var vertices = std.ArrayList(Vertex).init(allocator);
         var indices = std.ArrayList(gl.uint).init(allocator);
         var textures = std.ArrayList(texture.Texture).init(allocator);
-        var mesh_prim_progress: std.Progress.Node = progress_node.start("Processing mesh primitives", mesh.primitives_count);
+        var mesh_prim_progress: std.Progress.Node = progress_node.start("Processing mesh primitive sets", mesh.primitives_count);
         defer mesh_prim_progress.end();
         std.debug.print("Mesh has {d} primitive sets\n", .{mesh.primitives_count});
         // NOTE: It seems that a mesh having just one primitive is normal, and we could
@@ -280,8 +284,11 @@ pub const Model = struct {
         // INFO: The data is usually stored in buffers and retrieved by accessors, which
         // are methods for retrieving the data as typed arrays. The number of elements
         // found in an accessor is in accessor.count.
-        for (mesh.primitives[0..mesh.primitives_count]) |primitive| {
-            var mesh_attr_progress: std.Progress.Node = progress_node.start("Processing mesh attributes", primitive.attributes_count);
+        for (mesh.primitives[0..mesh.primitives_count], 0..mesh.primitives_count) |primitive, k| {
+            var mesh_attr_progress: std.Progress.Node = mesh_prim_progress.start(
+                "Processing mesh attributes",
+                0,
+            );
             defer mesh_attr_progress.end();
             std.debug.print("Primitive has {d} attribute types\n", .{primitive.attributes_count});
             if (primitive.indices) |idx| {
@@ -316,6 +323,7 @@ pub const Model = struct {
             };
             for (attribute_types) |attr|
                 std.debug.print("Attribute has {d} elements of type '{s}'. Loading...\n", .{ attr.data.count, attr.name orelse "NONE" });
+            mesh_attr_progress.increaseEstimatedTotalItems(attribute_types[0].data.count);
             for (0..attribute_types[0].data.count) |i| {
                 vertex = Vertex{
                     .position = undefined,
@@ -354,9 +362,12 @@ pub const Model = struct {
                     }
                 }
                 try vertices.append(vertex);
+                mesh_attr_progress.setCompletedItems(i);
             }
 
             if (primitive.material) |material| {
+                var material_progress: std.Progress.Node = mesh_attr_progress.start("Processing material", 0);
+                defer material_progress.end();
                 if (material.has_pbr_specular_glossiness == 1) {
                     // INFO: It seems to also support PBR specular-glossiness with our
                     // familiar diffuse and specular maps! Hooray
@@ -395,6 +406,7 @@ pub const Model = struct {
                     log.err("Unable to load material {s}", .{material.name orelse "empty"});
                 }
             }
+            mesh_prim_progress.setCompletedItems(k);
         }
         std.debug.print("Initializing Mesh with {d} vertices...\n", .{vertices.items.len});
         return Mesh.init(
