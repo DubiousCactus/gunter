@@ -4,6 +4,7 @@ const gl = @import("gl");
 const std = @import("std");
 
 const core = @import("core.zig");
+const texture = @import("texture.zig");
 
 const gl_log = std.log.scoped(.gl);
 const log = std.log;
@@ -14,25 +15,15 @@ pub const Vertex = extern struct {
     texture_coords: [2]gl.float,
 };
 
-pub const Texture = struct {
-    id: u8,
-    type_: TextureType,
-
-    pub const TextureType = enum {
-        diffuse,
-        specular,
-    };
-};
-
 pub const Mesh = struct {
     indices: []gl.uint,
     vertices: []Vertex,
-    textures: []Texture,
+    textures: []texture.Texture,
     VAO: c_uint,
     VBO: c_uint,
     EBO: c_uint,
 
-    pub fn init(indices: []gl.uint, vertices: []Vertex, textures: []Texture) Mesh {
+    pub fn init(indices: []gl.uint, vertices: []Vertex, textures: []texture.Texture) Mesh {
         var VAO: [1]c_uint = undefined;
         var VBO: [1]c_uint = undefined;
         var EBO: [1]c_uint = undefined;
@@ -242,7 +233,7 @@ pub const Model = struct {
         // TODO: Load model matrices, etc.
         var vertices = std.ArrayList(Vertex).init(allocator);
         var indices = std.ArrayList(gl.uint).init(allocator);
-        var textures = std.ArrayList(Texture).init(allocator);
+        var textures = std.ArrayList(texture.Texture).init(allocator);
         var mesh_prim_progress: std.Progress.Node = progress_node.start("Processing mesh primitives", mesh.primitives_count);
         defer mesh_prim_progress.end();
         std.debug.print("Mesh has {d} primitive sets\n", .{mesh.primitives_count});
@@ -339,14 +330,14 @@ pub const Model = struct {
                     // material.pbr_specular_glossiness.specular_factor;
                     // material.pbr_specular_glossiness.glossiness_factor;
                     // material.pbr_specular_glossiness.specular_glossiness_texture;
-                    if (material.pbr_specular_glossiness.diffuse_texture.texture) |texture| {
-                        _ = texture;
+                    if (material.pbr_specular_glossiness.diffuse_texture.texture) |tex| {
+                        try textures.append(Model.load_texture(tex, .diffuse));
                         std.debug.print("Material diffuse color is a texture\n", .{});
                     } else {
                         std.debug.print("material diffuse color is a factor\n", .{});
                     }
-                    if (material.pbr_specular_glossiness.specular_glossiness_texture.texture) |texture| {
-                        _ = texture;
+                    if (material.pbr_specular_glossiness.specular_glossiness_texture.texture) |tex| {
+                        try textures.append(Model.load_texture(tex, .specular));
                         std.debug.print("Material specular-glossiness is a texture\n", .{});
                     } else {
                         std.debug.print("material specular-glossiness are factors\n", .{});
@@ -358,14 +349,14 @@ pub const Model = struct {
                     // 0.0 and 1.0, or b) a texture.
                     std.debug.print("Material is PBRmetallicRoughness\n", .{});
                     // material.pbr_metallic_roughness.base_color_factor;
-                    if (material.pbr_metallic_roughness.base_color_texture.texture) |texture| {
-                        try textures.append(Model.load_texture(texture));
+                    if (material.pbr_metallic_roughness.base_color_texture.texture) |tex| {
+                        try textures.append(Model.load_texture(tex, .base_color));
                         std.debug.print("Material base color is a texture\n", .{});
                     } else {
                         std.debug.print("material base color is a factor\n", .{});
                     }
-                    if (material.pbr_metallic_roughness.metallic_roughness_texture.texture) |texture| {
-                        _ = texture;
+                    if (material.pbr_metallic_roughness.metallic_roughness_texture.texture) |tex| {
+                        try textures.append(Model.load_texture(tex, .metalic_roughness));
                         std.debug.print("Material metalic roughness is a texture\n", .{});
                     } else {
                         std.debug.print("material metallic rougness are factors\n", .{});
@@ -383,9 +374,9 @@ pub const Model = struct {
         );
     }
 
-    fn load_texture(gltf_texture: *zmesh.io.zcgltf.Texture) Texture {
+    fn load_texture(gltf_texture: *zmesh.io.zcgltf.Texture, texture_type: texture.TextureType) texture.Texture {
         std.debug.print("Loading texture '{s}'...\n", .{gltf_texture.name orelse "noname"});
-        return Texture{ .id = undefined, .type_ = undefined };
+        return texture.Texture{ .id = undefined, .type_ = texture_type };
     }
 
     pub fn draw(self: Model, shader_program: core.ShaderProgram) !void {

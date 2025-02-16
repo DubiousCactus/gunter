@@ -1,14 +1,13 @@
 const std = @import("std");
-const glfw = @import("mach-glfw");
 const gl = @import("gl");
 const zigimg = @import("zigimg");
 const zm = @import("zm");
 
-const glfw_log = std.log.scoped(.glfw);
 const gl_log = std.log.scoped(.gl);
 const log = std.log;
 
 const core = @import("core.zig");
+const texture = @import("texture.zig");
 
 pub const Camera = struct {
     translation: zm.Vec3f,
@@ -190,9 +189,6 @@ pub const SkyBox = struct {
         gl.BufferData(gl.ARRAY_BUFFER, @sizeOf(gl.float) * skybox_cube_verts.len, &skybox_cube_verts, gl.STATIC_DRAW);
         gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 3 * @sizeOf(gl.float), 0);
         gl.EnableVertexAttribArray(0);
-        gl.ActiveTexture(gl.TEXTURE0);
-        gl.BindTexture(gl.TEXTURE_CUBE_MAP, tbo); // Binds to the active texture unit
-        // TODO: Refactor texture loading
         const skybox_dir = std.fs.cwd().openDir(directory, .{}) catch |err| {
             log.err("failed to open skybox directory: {?s}", .{directory});
             return err;
@@ -206,26 +202,21 @@ pub const SkyBox = struct {
             "front.png",
             "back.png",
         };
-        var file: ?std.fs.File = undefined;
+        var file: std.fs.File = undefined;
         for (file_names, 0..) |file_name, i| {
             file = skybox_dir.openFile(file_name, .{}) catch |err| {
                 log.err("failed to open skybox file: {?s}", .{file_name});
                 return err;
             };
-            var image = try zigimg.Image.fromFile(allocator, &file.?);
-            errdefer image.deinit();
-            gl.TexImage2D(
+            try texture.load_from_file(
+                file,
+                gl.TEXTURE0,
+                gl.TEXTURE_CUBE_MAP,
+                tbo,
                 gl.TEXTURE_CUBE_MAP_POSITIVE_X + @as(c_uint, @intCast(i)),
-                0,
-                gl.RGB,
-                @as(c_int, @intCast(image.width)),
-                @as(c_int, @intCast(image.height)),
-                0,
-                if (image.pixelFormat().isRgba()) gl.RGBA else gl.RGB,
-                gl.UNSIGNED_BYTE,
-                image.rawBytes().ptr,
+                false,
+                allocator,
             );
-            image.deinit();
         }
         gl.TexParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
         gl.TexParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
@@ -258,7 +249,6 @@ pub const SkyBox = struct {
     }
 
     pub fn deinit(self: SkyBox) void {
-        // TODO: Deinit VAOS, VBOS, TBOS
         self.shader_program.delete();
         var buffer: [1]c_uint = .{self.VBO};
         var vao: [1]c_uint = .{self.VAO};
