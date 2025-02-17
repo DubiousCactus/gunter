@@ -425,11 +425,46 @@ pub const Model = struct {
         texture_type: texture.TextureType,
         allocator: std.mem.Allocator,
     ) !texture.Texture {
+        // INFO: A texture has an "image" source and a "sampler".
+        if (gltf_texture.image == null) {
+            log.err("No image provided for texture", .{});
+            return texture.TextureError.NoImageProvided;
+        }
         std.debug.print("Loading texture '{s}' of type {}...\n", .{ gltf_texture.image.?.name orelse "noname", texture_type });
-        // TODO: Use the loaded_textures hashmap!
-        var text_out = try texture.load_from_gltf(gltf_texture, self.directory, allocator);
-        text_out.type_ = texture_type;
-        return text_out;
+        var texture_out: texture.Texture = undefined;
+        if (gltf_texture.image.?.uri) |image_uri| {
+            if (self.loaded_textures.get(std.mem.sliceTo(image_uri, 0))) |cached_texture| {
+                texture_out = cached_texture;
+            } else {
+                texture_out = try texture.load_from_gltf_as_path(image_uri, self.directory, allocator);
+                texture_out.type_ = texture_type;
+                try self.loaded_textures.put(std.mem.sliceTo(image_uri, 0), texture_out);
+            }
+        } else if (gltf_texture.image.?.buffer_view) |buffer_view| {
+            std.debug.print("Loading texture from buffer view\n", .{});
+            std.debug.print("Loading {d} bytes\n", .{buffer_view.size});
+            return error.NotImplementedError;
+            // const image_data: ?[*]u8 = buffer_view.getData();
+            // gl.BindTexture(gl.TEXTURE_2D, tbo[0]);
+            // gl.TexImage2D(
+            //     gl.TEXTURE_2D,
+            //     0,
+            //     gl.RGB,
+            //     @as(c_int, @intCast(image.width)),
+            //     @as(c_int, @intCast(image.height)),
+            //     0,
+            //     if (image.pixelFormat().isRgba()) gl.RGBA else gl.RGB,
+            //     gl.UNSIGNED_BYTE,
+            //     image_data,
+            // );
+            // if (generate_mipmap)
+            //     gl.GenerateMipmap(gl.TEXTURE_2D);
+        } else if (gltf_texture.image.?.extras.data) |image_data| {
+            std.debug.print("Loading texture from data\n", .{});
+            _ = image_data;
+            return error.NotImplementedError;
+        }
+        return texture_out;
     }
 
     pub fn draw(self: Model, shader_program: core.ShaderProgram) !void {

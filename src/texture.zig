@@ -76,61 +76,28 @@ pub fn load_from_file(
         gl.GenerateMipmap(gl.TEXTURE_2D);
 }
 
-pub fn load_from_gltf(
-    tex: *zmesh.io.zcgltf.Texture,
+pub fn load_from_gltf_as_path(
+    path: [*:0]const u8,
     root_dir: []const u8,
     allocator: std.mem.Allocator,
 ) !Texture {
-    // INFO: A texture has an "image" source and a "sampler".
-    if (tex.image == null) {
-        log.err("No image provided for texture", .{});
-        return TextureError.NoImageProvided;
-    }
-
     var tbo: [1]c_uint = undefined;
     gl.GenTextures(1, &tbo);
     std.debug.print("Generated texture buffer object with id={d}\n", .{tbo[0]});
 
-    var path: [*:0]const u8 = undefined;
-    var use_mipmaps: bool = false;
+    const use_mipmaps: bool = true;
 
-    if (tex.image.?.uri) |image_uri| {
-        path = image_uri;
-        std.debug.print("Loading texture from uri: {s}\n", .{image_uri});
-        const dir = std.fs.cwd().openDir(root_dir, .{}) catch |err| {
-            log.err("failed to open directory: {?s}", .{root_dir});
-            return err;
-        };
-        const file = dir.openFile(std.mem.sliceTo(image_uri, 0), .{}) catch |err| {
-            log.err("failed to open texture file: {?s}", .{image_uri});
-            return err;
-        };
-        use_mipmaps = true;
-        try load_from_file(file, gl.TEXTURE_2D, tbo[0], gl.TEXTURE_2D, use_mipmaps, allocator);
-    } else if (tex.image.?.buffer_view) |buffer_view| {
-        std.debug.print("Loading texture from buffer view\n", .{});
-        std.debug.print("Loading {d} bytes\n", .{buffer_view.size});
-        return error.NotImplementedError;
-        // const image_data: ?[*]u8 = buffer_view.getData();
-        // gl.BindTexture(gl.TEXTURE_2D, tbo[0]);
-        // gl.TexImage2D(
-        //     gl.TEXTURE_2D,
-        //     0,
-        //     gl.RGB,
-        //     @as(c_int, @intCast(image.width)),
-        //     @as(c_int, @intCast(image.height)),
-        //     0,
-        //     if (image.pixelFormat().isRgba()) gl.RGBA else gl.RGB,
-        //     gl.UNSIGNED_BYTE,
-        //     image_data,
-        // );
-        // if (generate_mipmap)
-        //     gl.GenerateMipmap(gl.TEXTURE_2D);
-    } else if (tex.image.?.extras.data) |image_data| {
-        std.debug.print("Loading texture from data\n", .{});
-        _ = image_data;
-        return error.NotImplementedError;
-    }
+    std.debug.print("Loading texture from uri: {s}\n", .{path});
+    const dir = std.fs.cwd().openDir(root_dir, .{}) catch |err| {
+        log.err("failed to open directory: {?s}", .{root_dir});
+        return err;
+    };
+    const file = dir.openFile(std.mem.sliceTo(path, 0), .{}) catch |err| {
+        log.err("failed to open texture file: {?s}", .{path});
+        return err;
+    };
+    try load_from_file(file, gl.TEXTURE_2D, tbo[0], gl.TEXTURE_2D, use_mipmaps, allocator);
+
     return .{
         .id = tbo[0],
         .path = path,
