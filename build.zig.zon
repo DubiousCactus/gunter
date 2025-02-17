@@ -46,6 +46,10 @@
             .url = "git+https://github.com/zig-gamedev/zmesh.git#1fc267af7c8bd00cb2d79de12b3e0512a3b787cf",
             .hash = "1220791c58e1f2e911d5b776efe8893c64684a56d9196b98d95b59ee45b3624b048d",
         },
+        .zignal = .{
+            .url = "git+https://github.com/bfactory-ai/zignal#2f268183a764140d23f99130e151b9ec38e504bb",
+            .hash = "1220657ca6a2f840cf75b03ada582ea8cb18c353c9853e46301478e3f3b201daea37",
+        },
     },
     .paths = .{
         "build.zig",

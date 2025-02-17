@@ -3,6 +3,7 @@ const gl = @import("gl");
 const zigimg = @import("zigimg");
 const zm = @import("zm");
 const zmesh = @import("zmesh");
+const zignal = @import("zignal");
 
 const gl_log = std.log.scoped(.gl);
 const log = std.log;
@@ -31,6 +32,7 @@ pub fn load_from_path(
     TBO: c_uint,
     target: c_uint,
     generate_mipmap: bool,
+    flip_vertically: bool,
     allocator: std.mem.Allocator,
 ) !void {
     const file = std.fs.cwd().openFile(file_name, .{}) catch |err| {
@@ -43,6 +45,8 @@ pub fn load_from_path(
         TBO,
         target,
         generate_mipmap,
+
+        flip_vertically,
         allocator,
     );
 }
@@ -53,14 +57,23 @@ pub fn load_from_file(
     TBO: c_uint,
     target: c_uint,
     generate_mipmap: bool,
+    flip_vertically: bool,
     allocator: std.mem.Allocator,
 ) !void {
     var image = try zigimg.Image.fromFile(allocator, @constCast(&file));
     errdefer image.deinit();
     defer image.deinit();
     gl.BindTexture(gl_texture_type, TBO);
-    // TODO: Clarify where it gets bound. in the active texture or in the bound buffer
-    // object??
+    var pixel_data_ptr = image.rawBytes().ptr;
+    if (flip_vertically) {
+        var img = zignal.Image(zigimg.color.Rgb24).init(
+            image.width,
+            image.height,
+            @constCast(image.pixels.rgb24),
+        );
+        img.flipTopBottom();
+        pixel_data_ptr = img.asBytes().ptr;
+    }
     gl.TexImage2D(
         target,
         0,
@@ -70,7 +83,7 @@ pub fn load_from_file(
         0,
         if (image.pixelFormat().isRgba()) gl.RGBA else gl.RGB,
         gl.UNSIGNED_BYTE,
-        image.rawBytes().ptr,
+        pixel_data_ptr,
     );
     if (generate_mipmap)
         gl.GenerateMipmap(gl.TEXTURE_2D);
@@ -96,7 +109,15 @@ pub fn load_from_gltf_as_path(
         log.err("failed to open texture file: {?s}", .{path});
         return err;
     };
-    try load_from_file(file, gl.TEXTURE_2D, tbo[0], gl.TEXTURE_2D, use_mipmaps, allocator);
+    try load_from_file(
+        file,
+        gl.TEXTURE_2D,
+        tbo[0],
+        gl.TEXTURE_2D,
+        use_mipmaps,
+        true,
+        allocator,
+    );
 
     return .{
         .id = tbo[0],

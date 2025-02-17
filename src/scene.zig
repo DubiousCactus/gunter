@@ -214,6 +214,7 @@ pub const SkyBox = struct {
                 tbo,
                 gl.TEXTURE_CUBE_MAP_POSITIVE_X + @as(c_uint, @intCast(i)),
                 false, // NOTE: Make sure to not use mipmaps for the skybox!
+                false, // Do not flip!
                 allocator,
             );
         }

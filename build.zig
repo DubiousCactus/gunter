@@ -64,6 +64,9 @@ pub fn build(b: *std.Build) void {
     const zm = b.dependency("zm", .{});
     exe.root_module.addImport("zm", zm.module("zm"));
 
+    const zignal = b.dependency("zignal", .{});
+    exe.root_module.addImport("zignal", zignal.module("zignal"));
+
     const assimp = b.dependency("assimp", .{
         .target = target,
         .optimize = optimize,
