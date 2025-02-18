@@ -47,32 +47,31 @@ pub const Mesh = struct {
             indices.ptr,
             gl.STATIC_DRAW,
         );
-
         // Vertex positions
         gl.EnableVertexAttribArray(0);
         gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, @sizeOf(Vertex), 0);
-        // Vertex normals
-        // TODO: Figure out what happens if I don't initialize normals/texture
-        // coordinates for *one* mesh. Like, say I don't enable the vertex attribute
-        // array for the normals. What gets passed to the shader?
+        // Vertex texture coordinates
         gl.EnableVertexAttribArray(1);
         gl.VertexAttribPointer(
             1,
-            3,
-            gl.FLOAT,
-            gl.FALSE,
-            @sizeOf(Vertex),
-            @offsetOf(Vertex, "normal"),
-        );
-        // Vertex texture coordinates
-        gl.EnableVertexAttribArray(2);
-        gl.VertexAttribPointer(
-            2,
             2,
             gl.FLOAT,
             gl.FALSE,
             @sizeOf(Vertex),
             @offsetOf(Vertex, "texture_coords"),
+        );
+        // Vertex normals
+        // TODO: Figure out what happens if I don't initialize normals/texture
+        // coordinates for *one* mesh. Like, say I don't enable the vertex attribute
+        // array for the normals. What gets passed to the shader?
+        gl.EnableVertexAttribArray(2);
+        gl.VertexAttribPointer(
+            2,
+            3,
+            gl.FLOAT,
+            gl.FALSE,
+            @sizeOf(Vertex),
+            @offsetOf(Vertex, "normal"),
         );
 
         gl.BindVertexArray(0); // Unbind for good measures
@@ -89,8 +88,8 @@ pub const Mesh = struct {
 
     pub fn draw(self: Mesh, shader_program: core.ShaderProgram) !void {
         // TODO: Move the texture parameters somewhere else!
-        gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.MIRRORED_REPEAT);
-        gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.MIRRORED_REPEAT);
+        gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_BORDER);
+        gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_BORDER);
         gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
         // TODO: Handle more than one texture per material!
         var diffuse_nr: u8 = 1;
@@ -140,8 +139,9 @@ pub const Mesh = struct {
         var vao: [1]c_uint = .{self.VAO};
         gl.DeleteBuffers(2, &buffers);
         gl.DeleteVertexArrays(1, &vao);
-        // TODO: Destroy all textures? Where are they held? I need to see how I'm
-        // loading them first.
+        for (self.textures) |text| {
+            text.deinit();
+        }
         allocator.free(self.vertices);
         allocator.free(self.indices);
     }
@@ -473,10 +473,11 @@ pub const Model = struct {
         }
     }
 
-    pub fn deinit(self: Model, allocator: std.mem.Allocator) void {
+    pub fn deinit(self: *Model, allocator: std.mem.Allocator) void {
         for (self.meshes.items) |mesh| {
             mesh.deinit(allocator);
         }
         self.meshes.deinit();
+        self.loaded_textures.deinit();
     }
 };

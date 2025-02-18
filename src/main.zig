@@ -75,21 +75,26 @@ pub fn main() !void {
     defer multilight_textured_shader_program.delete();
     // ===================================================================================
     // ============================ VBOS, VAOs, and VEOs =================================
-    // const my_model = try model.Model.init(
+    // var my_model = try model.Model.init(
     //     "/Users/cactus/Code/learning-opengl/assets/dude.glb",
     //     allocator,
     //     .load_entire_scene,
     // );
-    const my_model = try model.Model.init(
-        "/Users/cactus/Code/learning-opengl/assets/guitar-backpack/scene.gltf",
-        allocator,
-        .load_entire_scene,
-    );
-    // const my_model = try model.Model.init(
-    //     "/Users/cactus/Code/learning-opengl/assets/dog/scene.gltf",
+    // var my_model = try model.Model.init(
+    //     "/Users/cactus/Code/learning-opengl/assets/guitar-backpack/scene.gltf",
     //     allocator,
     //     .load_entire_scene,
     // );
+    // var my_model = try model.Model.init(
+    //     "/Users/cactus/Code/learning-opengl/assets/thingy/scene.gltf",
+    //     allocator,
+    //     .load_entire_scene,
+    // );
+    var my_model = try model.Model.init(
+        "/Users/cactus/Code/learning-opengl/assets/dog/scene.gltf",
+        allocator,
+        .load_entire_scene,
+    );
     // const my_model = try model.Model.init(
     //     "/Users/cactus/Code/learning-opengl/assets/cube/cube.glb",
     //     allocator,

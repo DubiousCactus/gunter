@@ -20,6 +20,11 @@ pub const Texture = struct {
     type_: TextureType,
     path: [*:0]const u8,
     use_mipmaps: bool,
+
+    pub fn deinit(self: Texture) void {
+        var tbos: [1]c_uint = .{self.id};
+        gl.DeleteTextures(1, &tbos);
+    }
 };
 
 pub const TextureError = error{
@@ -45,7 +50,6 @@ pub fn load_from_path(
         TBO,
         target,
         generate_mipmap,
-
         flip_vertically,
         allocator,
     );
@@ -115,7 +119,7 @@ pub fn load_from_gltf_as_path(
         tbo[0],
         gl.TEXTURE_2D,
         use_mipmaps,
-        true,
+        false, // TODO: Figure out why NOT flipping the texture works! WTF?? Is gltf flipping the coordinates?
         allocator,
     );
 
