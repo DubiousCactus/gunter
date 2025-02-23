@@ -12,7 +12,7 @@ const texture = @import("texture.zig");
 pub const Camera = struct {
     translation: zm.Vec3f,
     pitch_yaw_speed: f32 = 0.1,
-    yaw: f32 = -90.0,
+    yaw: f32 = 90.0,
     pitch: f32 = 0.0,
     last_mouse_x: f64 = 0,
     last_mouse_y: f64 = 0,
@@ -35,15 +35,16 @@ pub const Camera = struct {
             self.last_mouse_y = y;
             self.first_mouse_enter = false;
         }
-        self.yaw = std.math.clamp(
-            self.yaw + self.pitch_yaw_speed * @as(f32, @floatCast(x - self.last_mouse_x)),
-            -180.0,
-            180.0,
-        );
+        self.yaw = self.yaw + self.pitch_yaw_speed * @as(f32, @floatCast(x - self.last_mouse_x));
+        if (self.yaw >= 360.0) {
+            self.yaw = 0.0;
+        } else if (self.yaw <= 0.0) {
+            self.yaw = 360.0;
+        }
         self.pitch = std.math.clamp(
             self.pitch + self.pitch_yaw_speed * @as(f32, @floatCast(self.last_mouse_y - y)),
-            -180.0,
-            180.0,
+            -90.0,
+            90.0,
         );
         self.last_mouse_x = x;
         self.last_mouse_y = y;
