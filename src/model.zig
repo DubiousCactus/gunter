@@ -1,12 +1,22 @@
 const zmesh = @import("zmesh");
 const gl = @import("gl");
 const std = @import("std");
+const zm = @import("zm");
 
 const core = @import("core.zig");
 const texture = @import("texture.zig");
 
 const gl_log = std.log.scoped(.gl);
 const log = std.log;
+
+pub fn mat4f_from_array(arr: [16]f32) zm.Mat4f {
+    return zm.Mat4f{ .data = .{
+        arr[0],  arr[1],  arr[2],  arr[3],
+        arr[4],  arr[5],  arr[6],  arr[7],
+        arr[8],  arr[9],  arr[10], arr[11],
+        arr[12], arr[13], arr[14], arr[15],
+    } };
+}
 
 pub const Vertex = extern struct {
     position: [3]gl.float,
@@ -21,8 +31,14 @@ pub const Mesh = struct {
     VAO: c_uint,
     VBO: c_uint,
     EBO: c_uint,
+    world_matrix: zm.Mat4f,
 
-    pub fn init(indices: []gl.uint, vertices: []Vertex, textures: []texture.Texture) !Mesh {
+    pub fn init(
+        indices: []gl.uint,
+        vertices: []Vertex,
+        textures: []texture.Texture,
+        world_matrix: zm.Mat4f,
+    ) !Mesh {
         var VAO: [1]c_uint = undefined;
         var VBO: [1]c_uint = undefined;
         var EBO: [1]c_uint = undefined;
@@ -83,6 +99,7 @@ pub const Mesh = struct {
             .VAO = VAO[0],
             .VBO = VBO[0],
             .EBO = EBO[0],
+            .world_matrix = world_matrix,
         };
     }
 
@@ -128,6 +145,8 @@ pub const Mesh = struct {
         }
         // // // TODO: Where do we store the shininess during model loading?
         try shader_program.setTextureMaterial(texture_mat);
+        try shader_program.setMat4f("u_model", self.world_matrix, false); // Do not
+        // transpose because the matrix is already stored transposed in the GLTF model
         gl.BindVertexArray(self.VAO);
         gl.DrawElements(gl.TRIANGLES, @as(c_int, @intCast(self.indices.len)), gl.UNSIGNED_INT, 0);
         gl.BindVertexArray(0); // Unbind for good measures!
@@ -248,7 +267,15 @@ pub const Model = struct {
         progress_node: std.Progress.Node,
     ) !void {
         if (node.mesh) |mesh| {
-            try self.meshes.append(try self.process_mesh(mesh, allocator, progress_node));
+            // TODO: Load the name and translation/rotation components (node.matrix)
+            try self.meshes.append(
+                try self.process_mesh(
+                    mesh,
+                    mat4f_from_array(node.transformWorld()),
+                    allocator,
+                    progress_node,
+                ),
+            );
             progress_node.setCompletedItems(self.meshes.items.len);
         }
         if (node.children) |children| {
@@ -263,6 +290,7 @@ pub const Model = struct {
     fn process_mesh(
         self: *Model,
         mesh: *zmesh.io.zcgltf.Mesh,
+        world_matrix: zm.Mat4f,
         allocator: std.mem.Allocator,
         progress_node: std.Progress.Node,
     ) !Mesh {
@@ -416,6 +444,7 @@ pub const Model = struct {
             try indices.toOwnedSlice(),
             try vertices.toOwnedSlice(),
             try textures.toOwnedSlice(),
+            world_matrix,
         );
     }
 
