@@ -26,7 +26,7 @@ pub fn main() !void {
     var context = try core.Context.init(allocator, screen_w, screen_h, true, true, true);
     defer context.destroy(allocator);
     var ticker = try core.Ticker.init();
-    var camera = scene.Camera{ .translation = zm.Vec3f{ 0, 0, -3 }, .ticker = &ticker };
+    var camera = scene.Camera{ .translation = zm.Vec3f{ 0, 0, -6 }, .ticker = &ticker };
     var input_handler = input.InputHandler.init(&camera);
 
     context.window.setUserPointer(&input_handler);
@@ -85,6 +85,7 @@ pub fn main() !void {
         allocator,
         .load_entire_scene,
     );
+    my_model.scale(0.01);
     // var my_model = try model.Model.init(
     //     "/Users/cactus/Code/learning-opengl/assets/thingy/scene.gltf",
     //     allocator,

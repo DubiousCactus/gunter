@@ -32,6 +32,7 @@ pub const Mesh = struct {
     VBO: c_uint,
     EBO: c_uint,
     world_matrix: zm.Mat4f,
+    scaling: zm.Mat4f = zm.Mat4f.identity(),
 
     pub fn init(
         indices: []gl.uint,
@@ -145,12 +146,16 @@ pub const Mesh = struct {
         }
         // // // TODO: Where do we store the shininess during model loading?
         try shader_program.setTextureMaterial(texture_mat);
-        try shader_program.setMat4f("u_model", self.world_matrix, false); // Do not
+        try shader_program.setMat4f("u_model", self.world_matrix.multiply(self.scaling), false); // Do not
         // transpose because the matrix is already stored transposed in the GLTF model
         gl.BindVertexArray(self.VAO);
         gl.DrawElements(gl.TRIANGLES, @as(c_int, @intCast(self.indices.len)), gl.UNSIGNED_INT, 0);
         gl.BindVertexArray(0); // Unbind for good measures!
         gl.ActiveTexture(gl.TEXTURE0); // Reset for good measures!
+    }
+
+    pub fn scale(self: *Mesh, scalar: f32) void {
+        self.scaling = zm.Mat4f.scaling(scalar, scalar, scalar);
     }
 
     pub fn deinit(self: Mesh, allocator: std.mem.Allocator) void {
@@ -494,6 +499,12 @@ pub const Model = struct {
             return error.NotImplementedError;
         }
         return texture_out;
+    }
+
+    pub fn scale(self: *Model, scalar: f32) void {
+        for (self.meshes.items) |*mesh| {
+            mesh.scale(scalar);
+        }
     }
 
     pub fn draw(self: Model, shader_program: core.ShaderProgram) !void {
