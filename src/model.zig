@@ -31,14 +31,14 @@ pub const Mesh = struct {
     VAO: c_uint,
     VBO: c_uint,
     EBO: c_uint,
-    world_matrix: zm.Mat4f,
+    name: [*:0]const u8 = undefined,
+    world_matrix: zm.Mat4f = zm.Mat4f.identity(),
     scaling: zm.Mat4f = zm.Mat4f.identity(),
 
     pub fn init(
         indices: []gl.uint,
         vertices: []Vertex,
         textures: []texture.Texture,
-        world_matrix: zm.Mat4f,
     ) !Mesh {
         var VAO: [1]c_uint = undefined;
         var VBO: [1]c_uint = undefined;
@@ -100,7 +100,6 @@ pub const Mesh = struct {
             .VAO = VAO[0],
             .VBO = VBO[0],
             .EBO = EBO[0],
-            .world_matrix = world_matrix,
         };
     }
 
@@ -272,15 +271,14 @@ pub const Model = struct {
         progress_node: std.Progress.Node,
     ) !void {
         if (node.mesh) |mesh| {
-            // TODO: Load the name and translation/rotation components (node.matrix)
-            try self.meshes.append(
-                try self.process_mesh(
-                    mesh,
-                    mat4f_from_array(node.transformWorld()),
-                    allocator,
-                    progress_node,
-                ),
+            var processed_mesh = try self.process_mesh(
+                mesh,
+                allocator,
+                progress_node,
             );
+            processed_mesh.world_matrix = mat4f_from_array(node.transformWorld());
+            processed_mesh.name = node.name orelse "noname";
+            try self.meshes.append(processed_mesh);
             progress_node.setCompletedItems(self.meshes.items.len);
         }
         if (node.children) |children| {
@@ -295,7 +293,6 @@ pub const Model = struct {
     fn process_mesh(
         self: *Model,
         mesh: *zmesh.io.zcgltf.Mesh,
-        world_matrix: zm.Mat4f,
         allocator: std.mem.Allocator,
         progress_node: std.Progress.Node,
     ) !Mesh {
@@ -449,7 +446,6 @@ pub const Model = struct {
             try indices.toOwnedSlice(),
             try vertices.toOwnedSlice(),
             try textures.toOwnedSlice(),
-            world_matrix,
         );
     }
 
