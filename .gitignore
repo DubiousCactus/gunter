@@ -2,3 +2,4 @@
 textures
 zig-out
 .DS_Store
+assets/*
