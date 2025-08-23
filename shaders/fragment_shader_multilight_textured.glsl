@@ -66,7 +66,7 @@ vec3 computeDirectionalLight(DirectionalLight light, vec3 normal,
       light.ambient * vec3(texture(u_material.diffuse, io_text_coords));
   vec3 specular = pow(max(dot(reflect(-light_dir, normal), view_dir), 0.0),
                       u_material.shininess) *
-                  vec3(texture(u_material.specular, io_text_coords)) *
+                  vec3(texture(u_material.specular, io_text_coords)).r *
                   light.specular;
   return ambient + diffuse + specular;
 }
@@ -81,7 +81,7 @@ vec3 computePointLight(PointLight light, vec3 normal, vec3 frag_pos,
       light.ambient * vec3(texture(u_material.diffuse, io_text_coords));
   vec3 specular = pow(max(dot(reflect(-light_dir, normal), view_dir), 0.0),
                       u_material.shininess) *
-                  vec3(texture(u_material.specular, io_text_coords)) *
+                  vec3(texture(u_material.specular, io_text_coords)).r *
                   light.specular;
   float dist = length(frag_pos - light.position);
   float attenuation = 1.0 / (light.constant + light.linear * dist +
@@ -107,7 +107,7 @@ vec3 computeSpotLight(SpotLight light, vec3 normal, vec3 frag_pos,
   vec3 specular =
       pow(max(dot(reflect(-incoming_light_dir, normal), view_dir), 0.0),
           u_material.shininess) *
-      vec3(texture(u_material.specular, io_text_coords)) * light.specular;
+      vec3(texture(u_material.specular, io_text_coords)).r * light.specular;
 
   float dist = length(frag_pos - light.position);
   float attenuation = 1.0 / (light.constant + light.linear * dist +
