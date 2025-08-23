@@ -116,12 +116,16 @@ pub const Mesh = struct {
         var texture_mat = core.TextureMaterial{
             .diffuse_texture_index = 0,
             .specular_texture_index = 1,
-            .shininess = 1,
+            .shininess = 32.0,
         };
         for (self.textures, 0..) |tex, i| {
             // WARN: Reflect the use of mipmaps with the choice of generating mipmaps in
             // the texture loading!! This is super important or it won't render textures.
-            gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, if (tex.use_mipmaps) gl.LINEAR_MIPMAP_LINEAR else gl.LINEAR);
+            gl.TexParameteri(
+                gl.TEXTURE_2D,
+                gl.TEXTURE_MIN_FILTER,
+                if (tex.use_mipmaps) gl.LINEAR_MIPMAP_LINEAR else gl.LINEAR,
+            );
             gl.ActiveTexture(gl.TEXTURE0 + @as(c_uint, @intCast(i)));
             gl.BindTexture(gl.TEXTURE_2D, tex.id);
             switch (tex.type_) {
@@ -143,7 +147,7 @@ pub const Mesh = struct {
                 },
             }
         }
-        // // // TODO: Where do we store the shininess during model loading?
+        // TODO: Where do we store the shininess during model loading?
         try shader_program.setTextureMaterial(texture_mat);
         try shader_program.setMat4f("u_model", self.world_matrix.multiply(self.scaling), false); // Do not
         // transpose because the matrix is already stored transposed in the GLTF model
@@ -465,6 +469,7 @@ pub const Model = struct {
         if (gltf_texture.image.?.uri) |image_uri| {
             if (self.loaded_textures.get(std.mem.sliceTo(image_uri, 0))) |cached_texture| {
                 texture_out = cached_texture;
+                std.debug.print("Using cache for '{s}\n", .{image_uri});
             } else {
                 texture_out = try texture.load_from_gltf_as_path(image_uri, self.directory, allocator);
                 texture_out.type_ = texture_type;
@@ -515,5 +520,49 @@ pub const Model = struct {
         }
         self.meshes.deinit();
         self.loaded_textures.deinit();
+    }
+};
+
+pub const Primitive = struct {
+    pub fn make_cube_mesh() Mesh {
+        const vertices: []gl.float = .{
+            -0.5, -0.5, -0.5, 0.0, 0.0,
+            0.5,  -0.5, -0.5, 1.0, 0.0,
+            0.5,  0.5,  -0.5, 1.0, 1.0,
+            0.5,  0.5,  -0.5, 1.0, 1.0,
+            -0.5, 0.5,  -0.5, 0.0, 1.0,
+            -0.5, -0.5, -0.5, 0.0, 0.0,
+            -0.5, -0.5, 0.5,  0.0, 0.0,
+            0.5,  -0.5, 0.5,  1.0, 0.0,
+            0.5,  0.5,  0.5,  1.0, 1.0,
+            0.5,  0.5,  0.5,  1.0, 1.0,
+            -0.5, 0.5,  0.5,  0.0, 1.0,
+            -0.5, -0.5, 0.5,  0.0, 0.0,
+            -0.5, 0.5,  0.5,  1.0, 0.0,
+            -0.5, 0.5,  -0.5, 1.0, 1.0,
+            -0.5, -0.5, -0.5, 0.0, 1.0,
+            -0.5, -0.5, -0.5, 0.0, 1.0,
+            -0.5, -0.5, 0.5,  0.0, 0.0,
+            -0.5, 0.5,  0.5,  1.0, 0.0,
+            0.5,  0.5,  0.5,  1.0, 0.0,
+            0.5,  0.5,  -0.5, 1.0, 1.0,
+            0.5,  -0.5, -0.5, 0.0, 1.0,
+            0.5,  -0.5, -0.5, 0.0, 1.0,
+            0.5,  -0.5, 0.5,  0.0, 0.0,
+            0.5,  0.5,  0.5,  1.0, 0.0,
+            -0.5, -0.5, -0.5, 0.0, 1.0,
+            0.5,  -0.5, -0.5, 1.0, 1.0,
+            0.5,  -0.5, 0.5,  1.0, 0.0,
+            0.5,  -0.5, 0.5,  1.0, 0.0,
+            -0.5, -0.5, 0.5,  0.0, 0.0,
+            -0.5, -0.5, -0.5, 0.0, 1.0,
+            -0.5, 0.5,  -0.5, 0.0, 1.0,
+            0.5,  0.5,  -0.5, 1.0, 1.0,
+            0.5,  0.5,  0.5,  1.0, 0.0,
+            0.5,  0.5,  0.5,  1.0, 0.0,
+            -0.5, 0.5,  0.5,  0.0, 0.0,
+            -0.5, 0.5,  -0.5, 0.0, 1.0,
+        };
+        return Mesh.init(.{}, vertices, .{});
     }
 };

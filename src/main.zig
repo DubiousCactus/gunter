@@ -80,32 +80,33 @@ pub fn main() !void {
     //     allocator,
     //     .load_entire_scene,
     // );
-    // var my_model = try model.Model.init(
-    //     "/Users/cactus/Code/learning-opengl/assets/guitar-backpack/scene.gltf",
-    //     allocator,
-    //     .load_entire_scene,
-    // );
-    // my_model.scale(0.01);
+    var my_model = try model.Model.init(
+        "/Users/cactus/Code/learning-opengl/assets/guitar-backpack/scene.gltf",
+        allocator,
+        .load_entire_scene,
+    );
+    my_model.scale(0.01);
     // var my_model = try model.Model.init(
     //     "/Users/cactus/Code/learning-opengl/assets/thingy/scene.gltf",
     //     allocator,
     //     .load_entire_scene,
     // );
-    var my_model = try model.Model.init(
-        "/Users/cactus/Code/learning-opengl/assets/vase/scene.gltf",
-        allocator,
-        .load_entire_scene,
-    );
+    // var my_model = try model.Model.init(
+    //     "/Users/cactus/Code/learning-opengl/assets/vase/scene.gltf",
+    //     allocator,
+    //     .load_entire_scene,
+    // );
     // var my_model = try model.Model.init(
     //     "/Users/cactus/Code/learning-opengl/assets/dog/scene.gltf",
     //     allocator,
     //     .load_entire_scene,
     // );
-    // const my_model = try model.Model.init(
+    // var my_model = try model.Model.init(
     //     "/Users/cactus/Code/learning-opengl/assets/cube/cube.glb",
     //     allocator,
     //     .load_root_mesh_only,
     // );
+    // my_model.scale(1);
     defer my_model.deinit(allocator);
     std.debug.print("Model loaded! Drawing...\n", .{});
 
@@ -118,6 +119,9 @@ pub fn main() !void {
         zm.Vec3f{ 0.0, 0.0, -3.0 },
     };
     std.debug.print("Done!\n", .{});
+
+    // const cube_model: model.Mesh = model.Primitive.make_cube_mesh();
+    // defer cube_model.deinit();
 
     const skybox = try scene.SkyBox.init(allocator, "textures/skybox");
     defer skybox.deinit();
@@ -151,28 +155,34 @@ pub fn main() !void {
                 .linear = 0.09,
                 .quadratic = 0.032,
             });
+            // cube_model.world_matrix = cube_model.scale(0.1);
+            // cube_model.draw(active_shader_program);
             // gl.BindVertexArray(light_cube_vao);
-            // try active_shader_program.setMat4f("u_model", zm.Mat4f.translationVec3(light_pos), true,);
+            // try active_shader_program.setMat4f(
+            //     "u_model",
+            //     zm.Mat4f.translationVec3(light_pos),
+            //     true,
+            // );
             // gl.DrawArrays(gl.TRIANGLES, 0, 36);
         }
-        // try active_shader_program.setSpotLight(.{
-        //     .position = camera.translation,
-        //     .direction = camera.front,
-        //     .inner_cutoff_angle_cosine = @cos(std.math.degreesToRadians(15)),
-        //     .outer_cutoff_angle_cosine = @cos(std.math.degreesToRadians(25)),
-        //     .ambient = zm.Vec3f{ 0.1, 0.1, 0.1 },
-        //     .diffuse = zm.Vec3f{ 0.9, 0.0, 0.0 },
-        //     .specular = zm.Vec3f{ 1.0, 0.0, 0.0 },
-        //     .constant = 1.0,
-        //     .linear = 0.027,
-        //     .quadratic = 0.0028,
-        // });
-        // try active_shader_program.setDirectionalLight(.{
-        //     .direction = zm.Vec3f{ -0.2, -6.0, -2.3 },
-        //     .ambient = zm.Vec3f{ 0.1, 0.1, 0.1 },
-        //     .diffuse = zm.Vec3f{ 0.2, 0.2, 0.2 },
-        //     .specular = zm.Vec3f{ 1.0, 1.0, 1.0 },
-        // });
+        try active_shader_program.setSpotLight(.{
+            .position = camera.translation,
+            .direction = camera.front,
+            .inner_cutoff_angle_cosine = @cos(std.math.degreesToRadians(15)),
+            .outer_cutoff_angle_cosine = @cos(std.math.degreesToRadians(25)),
+            .ambient = zm.Vec3f{ 0.1, 0.1, 0.1 },
+            .diffuse = zm.Vec3f{ 1.0, 1.0, 1.0 },
+            .specular = zm.Vec3f{ 1.0, 1.0, 1.0 },
+            .constant = 1.0,
+            .linear = 0.027,
+            .quadratic = 0.0028,
+        });
+        try active_shader_program.setDirectionalLight(.{
+            .direction = zm.Vec3f{ -0.2, -6.0, -2.3 },
+            .ambient = zm.Vec3f{ 0.1, 0.1, 0.1 },
+            .diffuse = zm.Vec3f{ 0.2, 0.2, 0.2 },
+            .specular = zm.Vec3f{ 1.0, 1.0, 1.0 },
+        });
 
         // gl.BindVertexArray(light_cube_vao);
         // gl.DrawArrays(gl.TRIANGLES, 0, 36);
