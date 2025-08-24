@@ -155,6 +155,8 @@ pub const Mesh = struct {
                 }
             }
             // TODO: Where do we store the shininess during model loading?
+            // FIXME: If a mesh doesn't have a texture, this breaks. We should swap the
+            // shader program for a non-textured one, and skip this whole block.
             try shader_program.setTextureMaterial(texture_mat);
         }
         try shader_program.setMat4f("u_model", self.world_matrix.multiply(self.scaling), false); // Do not
@@ -529,7 +531,6 @@ pub const Model = struct {
     pub fn draw(
         self: *Model,
         shader_program: core.ShaderProgram,
-        model_mat: zm.Mat4f,
         options: DrawOptions,
         view_mat: zm.Mat4f,
         proj_mat: zm.Mat4f,
@@ -540,7 +541,6 @@ pub const Model = struct {
             gl.StencilFunc(gl.ALWAYS, 1, 0xFF); // Always pass and write  1
             gl.StencilMask(0xFF); // Enable writing
         }
-        try shader_program.setMat4f("u_model", model_mat, true);
         for (self.meshes.items) |mesh| {
             try mesh.draw(shader_program, options);
         }
@@ -555,7 +555,6 @@ pub const Model = struct {
             options.highlight_shader.?.use();
             try options.highlight_shader.?.setMat4f("u_view", view_mat, true);
             try options.highlight_shader.?.setMat4f("u_proj", proj_mat, true);
-            try options.highlight_shader.?.setMat4f("u_model", model_mat, true);
             self.scale(1.05);
             for (self.meshes.items) |mesh| {
                 try mesh.draw(options.highlight_shader.?.*, .{ .use_textures = false }); // FIXME:

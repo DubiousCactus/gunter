@@ -343,7 +343,7 @@ pub const Context = struct {
             return error.GLFWInitFailed;
         }
 
-        const window = glfw.Window.create(width, height, "OpenGL", null, null, .{
+        const window = glfw.Window.create(width, height, "Gunter", null, null, .{
             .context_version_major = gl.info.version_major,
             .context_version_minor = gl.info.version_minor,
             .opengl_profile = .opengl_core_profile,
