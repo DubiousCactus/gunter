@@ -86,12 +86,17 @@ pub fn main() !void {
     //     allocator,
     //     .load_entire_scene,
     // );
+    // var my_model = try model.Model.init(
+    //     "/Users/cactus/Code/learning-opengl/assets/guitar-backpack/scene.gltf",
+    //     allocator,
+    //     .load_entire_scene,
+    // );
+    // my_model.set_scale(0.01);
     var my_model = try model.Model.init(
-        "/Users/cactus/Code/learning-opengl/assets/guitar-backpack/scene.gltf",
+        "/Users/cactus/Code/learning-opengl/assets/blender/test_scene.gltf",
         allocator,
         .load_entire_scene,
     );
-    my_model.set_scale(0.01);
     // var my_model = try model.Model.init(
     //     "/Users/cactus/Code/learning-opengl/assets/thingy/scene.gltf",
     //     allocator,
@@ -116,7 +121,6 @@ pub fn main() !void {
     defer my_model.deinit(allocator);
     std.debug.print("Model loaded! Drawing...\n", .{});
 
-    const model_mat = zm.Mat4f.identity();
     const projection_mat = zm.Mat4f.perspective(45, 1, 0.1, 1000);
     const point_lights = [_]zm.Vec3f{
         zm.Vec3f{ 0.7, 0.2, 2.0 },
@@ -195,8 +199,8 @@ pub fn main() !void {
         // gl.BindVertexArray(light_cube_vao);
         // gl.DrawArrays(gl.TRIANGLES, 0, 36);
         try active_shader_program.setBool("u_is_source", false);
-        try my_model.draw(active_shader_program, model_mat, .{
-            .highlight = true,
+        try my_model.draw(active_shader_program, .{
+            .highlight = false,
             .highlight_shader = &highlight_shader_program,
         }, camera.getViewMat(), projection_mat);
 

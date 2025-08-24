@@ -122,9 +122,12 @@ void main() {
     vec3 normal = normalize(io_normal);
     vec3 view_dir = normalize(u_cam_pos - io_frag_w_pos);
 
+    vec4 tex_color = texture(u_material.diffuse, io_text_coords);
+    if (tex_color.a < 0.1)
+      discard;
     // TODO: Optimize by precomputing reflections, dot products, and etc.
 
-    vec3 total_light = computeDirectionalLight(u_dir_light, normal, view_dir);
+    vec4 total_light = computeDirectionalLight(u_dir_light, normal, view_dir);
 
     for (int i = 0; i < NR_POINT_LIGHTS; i++)
       total_light +=

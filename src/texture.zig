@@ -81,7 +81,7 @@ pub fn load_from_file(
     gl.TexImage2D(
         target,
         0,
-        gl.RGB,
+        if (image.pixelFormat().isRgba()) gl.RGBA else gl.RGB,
         @as(c_int, @intCast(image.width)),
         @as(c_int, @intCast(image.height)),
         0,
