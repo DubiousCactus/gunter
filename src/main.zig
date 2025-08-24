@@ -73,6 +73,12 @@ pub fn main() !void {
         "shaders/fragment_shader_multilight_textured.glsl",
     );
     defer multilight_textured_shader_program.delete();
+    const highlight_shader_program: core.ShaderProgram = try core.ShaderProgram.init(
+        allocator,
+        "shaders/vertex_shader.glsl",
+        "shaders/fragment_shader_stencil_highlight.glsl",
+    );
+    defer highlight_shader_program.delete();
     // ===================================================================================
     // ============================ VBOS, VAOs, and VEOs =================================
     // var my_model = try model.Model.init(
@@ -85,7 +91,7 @@ pub fn main() !void {
         allocator,
         .load_entire_scene,
     );
-    my_model.scale(0.01);
+    my_model.set_scale(0.01);
     // var my_model = try model.Model.init(
     //     "/Users/cactus/Code/learning-opengl/assets/thingy/scene.gltf",
     //     allocator,
@@ -130,7 +136,7 @@ pub fn main() !void {
     var active_shader_program: core.ShaderProgram = multilight_textured_shader_program;
     // Wait for the user to close the window. This is the render loop!
     while (!context.window.shouldClose()) {
-        gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); // Clear the color and z buffers
+        gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT); // Clear the color and z buffers. TODO: Should be in the context if we do more similar stuff
         input_handler.consume(context.window);
         ticker.tick();
 
@@ -140,10 +146,12 @@ pub fn main() !void {
 
         multilight_textured_shader_program.use();
         active_shader_program = multilight_textured_shader_program;
-
-        try active_shader_program.setBool("u_is_source", true);
+        // we need to transpose to go column-major (OpenGL) since zm is
+        // row-major.
         try active_shader_program.setMat4f("u_view", camera.getViewMat(), true);
         try active_shader_program.setMat4f("u_proj", projection_mat, true);
+
+        try active_shader_program.setBool("u_is_source", true);
         try active_shader_program.setVec3f("u_cam_pos", camera.translation);
         for (point_lights, 0..) |light_pos, i| {
             try active_shader_program.setPointLight(@as(u8, @intCast(i)), .{
@@ -187,14 +195,10 @@ pub fn main() !void {
         // gl.BindVertexArray(light_cube_vao);
         // gl.DrawArrays(gl.TRIANGLES, 0, 36);
         try active_shader_program.setBool("u_is_source", false);
-
-        // we need to transpose to go column-major (OpenGL) since zm is
-        // row-major.
-        try active_shader_program.setMat4f("u_view", camera.getViewMat(), true);
-        try active_shader_program.setMat4f("u_proj", projection_mat, true);
-        try active_shader_program.setMat4f("u_model", model_mat, true);
-
-        try my_model.draw(active_shader_program);
+        try my_model.draw(active_shader_program, model_mat, .{
+            .highlight = true,
+            .highlight_shader = &highlight_shader_program,
+        }, camera.getViewMat(), projection_mat);
 
         context.window.swapBuffers(); // Swap the color buffer used to render at this frame and
         // show it in the window.

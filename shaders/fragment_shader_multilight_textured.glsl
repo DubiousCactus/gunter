@@ -134,5 +134,12 @@ void main() {
         computeSpotLight(u_spot_light, normal, io_frag_w_pos, view_dir);
 
     o_frag_color = vec4(total_light, 1.0);
+
+    // float near = 0.1;
+    // float far = 100.0;
+    //
+    // float ndc = gl_FragCoord.z * 2.0 - 1.0; // Back to NDC
+    // float linearDepth = (2.0 * near * far) / (far + near - ndc * (far -
+    // near)); o_frag_color = vec4(vec3(linearDepth) / far, 1.0);
   }
 }

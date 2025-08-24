@@ -9,6 +9,12 @@ const texture = @import("texture.zig");
 const gl_log = std.log.scoped(.gl);
 const log = std.log;
 
+pub const DrawOptions = struct {
+    use_textures: bool = true,
+    highlight: bool = false,
+    highlight_shader: ?*const core.ShaderProgram = null,
+};
+
 pub fn mat4f_from_array(arr: [16]f32) zm.Mat4f {
     return zm.Mat4f{ .data = .{
         arr[0],  arr[1],  arr[2],  arr[3],
@@ -103,52 +109,54 @@ pub const Mesh = struct {
         };
     }
 
-    pub fn draw(self: Mesh, shader_program: core.ShaderProgram) !void {
-        // TODO: Move the texture parameters somewhere else!
-        gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_BORDER);
-        gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_BORDER);
-        gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-        // TODO: Handle more than one texture per material!
-        var diffuse_nr: u8 = 1;
-        var specular_nr: u8 = 1;
-        // FIXME: Things start to break if the texture indices are beyond activated
-        // textures. But what if I don't have the diffuse or the specular?
-        var texture_mat = core.TextureMaterial{
-            .diffuse_texture_index = 0,
-            .specular_texture_index = 1,
-            .shininess = 32.0,
-        };
-        for (self.textures, 0..) |tex, i| {
-            // WARN: Reflect the use of mipmaps with the choice of generating mipmaps in
-            // the texture loading!! This is super important or it won't render textures.
-            gl.TexParameteri(
-                gl.TEXTURE_2D,
-                gl.TEXTURE_MIN_FILTER,
-                if (tex.use_mipmaps) gl.LINEAR_MIPMAP_LINEAR else gl.LINEAR,
-            );
-            gl.ActiveTexture(gl.TEXTURE0 + @as(c_uint, @intCast(i)));
-            gl.BindTexture(gl.TEXTURE_2D, tex.id);
-            switch (tex.type_) {
-                .diffuse, .base_color => {
-                    if (diffuse_nr > 1) {
-                        std.debug.print("Hey man we don't handle multiple textures per material. Only 1 diffuse and 1 specular allowed bro it's what it is.\n", .{});
-                        return error.TooManyTextures;
-                    }
-                    texture_mat.diffuse_texture_index = @as(i32, @intCast(i));
-                    diffuse_nr += 1;
-                },
-                .specular, .metalic_roughness => {
-                    if (specular_nr > 1) {
-                        std.debug.print("Hey man we don't handle multiple textures per material. Only 1 diffuse and 1 specular allowed bro it's what it is.\n", .{});
-                        return error.TooManyTextures;
-                    }
-                    texture_mat.specular_texture_index = @as(i32, @intCast(i));
-                    specular_nr += 1;
-                },
+    pub fn draw(self: Mesh, shader_program: core.ShaderProgram, options: DrawOptions) !void {
+        if (options.use_textures) {
+            // TODO: Move the texture parameters somewhere else!
+            gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_BORDER);
+            gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_BORDER);
+            gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+            // TODO: Handle more than one texture per material!
+            var diffuse_nr: u8 = 1;
+            var specular_nr: u8 = 1;
+            // FIXME: Things start to break if the texture indices are beyond activated
+            // textures. But what if I don't have the diffuse or the specular?
+            var texture_mat = core.TextureMaterial{
+                .diffuse_texture_index = 0,
+                .specular_texture_index = 1,
+                .shininess = 32.0,
+            };
+            for (self.textures, 0..) |tex, i| {
+                // WARN: Reflect the use of mipmaps with the choice of generating mipmaps in
+                // the texture loading!! This is super important or it won't render textures.
+                gl.TexParameteri(
+                    gl.TEXTURE_2D,
+                    gl.TEXTURE_MIN_FILTER,
+                    if (tex.use_mipmaps) gl.LINEAR_MIPMAP_LINEAR else gl.LINEAR,
+                );
+                gl.ActiveTexture(gl.TEXTURE0 + @as(c_uint, @intCast(i)));
+                gl.BindTexture(gl.TEXTURE_2D, tex.id);
+                switch (tex.type_) {
+                    .diffuse, .base_color => {
+                        if (diffuse_nr > 1) {
+                            std.debug.print("Hey man we don't handle multiple textures per material. Only 1 diffuse and 1 specular allowed bro it's what it is.\n", .{});
+                            return error.TooManyTextures;
+                        }
+                        texture_mat.diffuse_texture_index = @as(i32, @intCast(i));
+                        diffuse_nr += 1;
+                    },
+                    .specular, .metalic_roughness => {
+                        if (specular_nr > 1) {
+                            std.debug.print("Hey man we don't handle multiple textures per material. Only 1 diffuse and 1 specular allowed bro it's what it is.\n", .{});
+                            return error.TooManyTextures;
+                        }
+                        texture_mat.specular_texture_index = @as(i32, @intCast(i));
+                        specular_nr += 1;
+                    },
+                }
             }
+            // TODO: Where do we store the shininess during model loading?
+            try shader_program.setTextureMaterial(texture_mat);
         }
-        // TODO: Where do we store the shininess during model loading?
-        try shader_program.setTextureMaterial(texture_mat);
         try shader_program.setMat4f("u_model", self.world_matrix.multiply(self.scaling), false); // Do not
         // transpose because the matrix is already stored transposed in the GLTF model
         gl.BindVertexArray(self.VAO);
@@ -157,8 +165,12 @@ pub const Mesh = struct {
         gl.ActiveTexture(gl.TEXTURE0); // Reset for good measures!
     }
 
-    pub fn scale(self: *Mesh, scalar: f32) void {
+    pub fn set_scale(self: *Mesh, scalar: f32) void {
         self.scaling = zm.Mat4f.scaling(scalar, scalar, scalar);
+    }
+
+    pub fn scale(self: *Mesh, scalar: f32) void {
+        self.scaling = self.scaling.multiply(zm.Mat4f.scaling(scalar, scalar, scalar));
     }
 
     pub fn deinit(self: Mesh, allocator: std.mem.Allocator) void {
@@ -502,15 +514,59 @@ pub const Model = struct {
         return texture_out;
     }
 
+    pub fn set_scale(self: *Model, scalar: f32) void {
+        for (self.meshes.items) |*mesh| {
+            mesh.set_scale(scalar);
+        }
+    }
+
     pub fn scale(self: *Model, scalar: f32) void {
         for (self.meshes.items) |*mesh| {
             mesh.scale(scalar);
         }
     }
 
-    pub fn draw(self: Model, shader_program: core.ShaderProgram) !void {
+    pub fn draw(
+        self: *Model,
+        shader_program: core.ShaderProgram,
+        model_mat: zm.Mat4f,
+        options: DrawOptions,
+        view_mat: zm.Mat4f,
+        proj_mat: zm.Mat4f,
+    ) !void {
+        if (options.highlight) {
+            gl.Enable(gl.STENCIL_TEST);
+            gl.StencilOp(gl.KEEP, gl.KEEP, gl.REPLACE); // Only update the stencil buffer if we pass the test.
+            gl.StencilFunc(gl.ALWAYS, 1, 0xFF); // Always pass and write  1
+            gl.StencilMask(0xFF); // Enable writing
+        }
+        try shader_program.setMat4f("u_model", model_mat, true);
         for (self.meshes.items) |mesh| {
-            try mesh.draw(shader_program);
+            try mesh.draw(shader_program, options);
+        }
+        if (options.highlight) {
+            if (options.highlight_shader == null) {
+                log.err("highlight shader not provided", .{});
+                return error.HighlightShaderNotProvided;
+            }
+            gl.StencilFunc(gl.NOTEQUAL, 1, 0xFF); // Pass test if not equal to 1
+            gl.StencilMask(0x00); // Disable writing
+            gl.Disable(gl.DEPTH_TEST);
+            options.highlight_shader.?.use();
+            try options.highlight_shader.?.setMat4f("u_view", view_mat, true);
+            try options.highlight_shader.?.setMat4f("u_proj", proj_mat, true);
+            try options.highlight_shader.?.setMat4f("u_model", model_mat, true);
+            self.scale(1.05);
+            for (self.meshes.items) |mesh| {
+                try mesh.draw(options.highlight_shader.?.*, .{ .use_textures = false }); // FIXME:
+                // copy other options?
+            }
+            gl.StencilMask(0xFF); // Enable writing
+            gl.StencilFunc(gl.ALWAYS, 1, 0xFF); // Always pass and write  1
+            gl.Enable(gl.DEPTH_TEST);
+            shader_program.use();
+            self.scale(1.0 / 1.05);
+            gl.Disable(gl.STENCIL_TEST);
         }
     }
 
