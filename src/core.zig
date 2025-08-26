@@ -264,6 +264,7 @@ pub const ShaderProgram = struct {
         try self.setInt("u_material.diffuse", value.diffuse_texture_index);
         try self.setInt("u_material.specular", value.specular_texture_index);
         try self.setFloat("u_material.shininess", value.shininess);
+        try self.setBool("u_is_textured", true);
     }
 
     pub fn setDirectionalLight(self: ShaderProgram, value: DirectionalLight) !void {

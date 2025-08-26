@@ -111,6 +111,7 @@ pub const Mesh = struct {
     }
 
     pub fn draw(self: Mesh, shader_program: core.ShaderProgram, options: DrawOptions) !void {
+        try shader_program.setBool("u_is_textured", false);
         if (options.use_textures) {
             // TODO: Move the texture parameters somewhere else!
             gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_BORDER);
@@ -156,9 +157,10 @@ pub const Mesh = struct {
                 }
             }
             // TODO: Where do we store the shininess during model loading?
-            // FIXME: If a mesh doesn't have a texture, this breaks. We should swap the
-            // shader program for a non-textured one, and skip this whole block.
-            try shader_program.setTextureMaterial(texture_mat);
+            if (self.textures.len > 0) {
+                // Set u_is_textured = true
+                try shader_program.setTextureMaterial(texture_mat);
+            }
         }
         try shader_program.setMat4f("u_model", self.world_matrix.multiply(self.scaling), false); // Do not
         // transpose because the matrix is already stored transposed in the GLTF model
