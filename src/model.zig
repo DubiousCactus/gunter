@@ -11,6 +11,7 @@ const log = std.log;
 
 pub const DrawOptions = struct {
     use_textures: bool = true,
+    sort_all_meshes: bool = false,
     highlight: bool = false,
     highlight_shader: ?*const core.ShaderProgram = null,
 };
@@ -540,6 +541,14 @@ pub const Model = struct {
             gl.StencilOp(gl.KEEP, gl.KEEP, gl.REPLACE); // Only update the stencil buffer if we pass the test.
             gl.StencilFunc(gl.ALWAYS, 1, 0xFF); // Always pass and write  1
             gl.StencilMask(0xFF); // Enable writing
+        }
+        if (options.sort_all_meshes) {
+            // Useful for transparency. Since we don't have a consistent way of tagging
+            // which objects are transparent when loading a whole scene, we'll sort them
+            // all for now. But in the future, we need a mechanism to improve this, or
+            // to implement order independent transparency.
+            return error.NotImplementedError;
+            // TODO: Use MultiArrayList.sort()
         }
         for (self.meshes.items) |mesh| {
             try mesh.draw(shader_program, options);

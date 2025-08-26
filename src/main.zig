@@ -23,7 +23,14 @@ pub fn main() !void {
     const allocator = arena.allocator();
     // =========================== Initialize OpenGL + GLFW ===========================
     std.debug.print("Setting up OpenGL context...\n", .{});
-    var context = try core.Context.init(allocator, screen_w, screen_h, true, true, true);
+    var context = try core.Context.init(allocator, .{
+        .width = screen_w,
+        .height = screen_h,
+        .enable_blending = true,
+        .enable_depth_testing = true,
+        .enable_vsync = true,
+        .grab_mouse = true,
+    });
     defer context.destroy(allocator);
     var ticker = try core.Ticker.init();
     var camera = scene.Camera{ .translation = zm.Vec3f{ 0, 0, -6 }, .ticker = &ticker };
@@ -39,7 +46,13 @@ pub fn main() !void {
         }
     }.anonymous_callback);
     context.window.setKeyCallback(struct {
-        fn anonymous_callback(window: glfw.Window, key: glfw.Key, scancode: i32, action: glfw.Action, mods: glfw.Mods) void {
+        fn anonymous_callback(
+            window: glfw.Window,
+            key: glfw.Key,
+            scancode: i32,
+            action: glfw.Action,
+            mods: glfw.Mods,
+        ) void {
             const user_ptr = window.getUserPointer(input.InputHandler);
             if (user_ptr != null) {
                 user_ptr.?.keyCallback(window, key, scancode, action, mods);
@@ -93,7 +106,7 @@ pub fn main() !void {
     // );
     // my_model.set_scale(0.01);
     var my_model = try model.Model.init(
-        "/Users/cactus/Code/learning-opengl/assets/blender/test_scene.gltf",
+        "/Users/cactus/Code/gunter/assets/blender/test_scene.gltf",
         allocator,
         .load_entire_scene,
     );

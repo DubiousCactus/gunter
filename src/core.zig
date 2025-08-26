@@ -322,20 +322,22 @@ pub const ShaderProgram = struct {
     }
 };
 
+pub const ContextOptions = struct {
+    width: u16,
+    height: u16,
+    enable_vsync: bool,
+    enable_depth_testing: bool,
+    enable_blending: bool,
+    grab_mouse: bool,
+};
+
 pub const Context = struct {
     window: glfw.Window,
 
     /// Procedure table that will hold loaded OpenGL functions.
     gl_procs: *gl.ProcTable,
 
-    pub fn init(
-        allocator: std.mem.Allocator,
-        width: u16,
-        height: u16,
-        enable_vsync: bool,
-        enable_depth_testing: bool,
-        grab_mouse: bool,
-    ) !Context {
+    pub fn init(allocator: std.mem.Allocator, options: ContextOptions) !Context {
         // Create an OpenGL context using a windowing system of your choice.
         glfw.setErrorCallback(logGLFWError);
         if (!glfw.init(.{})) {
@@ -343,7 +345,7 @@ pub const Context = struct {
             return error.GLFWInitFailed;
         }
 
-        const window = glfw.Window.create(width, height, "Gunter", null, null, .{
+        const window = glfw.Window.create(options.width, options.height, "Gunter", null, null, .{
             .context_version_major = gl.info.version_major,
             .context_version_minor = gl.info.version_minor,
             .opengl_profile = .opengl_core_profile,
@@ -354,7 +356,7 @@ pub const Context = struct {
         };
         // Make the window's context current
         glfw.makeContextCurrent(window);
-        if (enable_vsync) glfw.swapInterval(1);
+        if (options.enable_vsync) glfw.swapInterval(1);
 
         // Initialize the procedure table. This is a table where all OpenGL function
         // implementations are stored, because the implementations vary between drivers.
@@ -368,8 +370,12 @@ pub const Context = struct {
         // Make the procedure table current on the calling thread.
         gl.makeProcTableCurrent(gl_procs);
 
-        if (enable_depth_testing) gl.Enable(gl.DEPTH_TEST);
-        if (grab_mouse) window.setInputModeCursor(.disabled);
+        if (options.enable_depth_testing) gl.Enable(gl.DEPTH_TEST);
+        if (options.enable_blending) {
+            gl.Enable(gl.BLEND);
+            gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+        }
+        if (options.grab_mouse) window.setInputModeCursor(.disabled);
 
         return Context{
             .window = window,
