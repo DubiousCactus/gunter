@@ -41,12 +41,13 @@ pub const Mesh = struct {
     name: [*:0]const u8 = undefined,
     world_matrix: zm.Mat4f = zm.Mat4f.identity(),
     scaling: zm.Mat4f = zm.Mat4f.identity(),
+    is_row_major: bool = true, // zm is row-major, OpenGL is column-major
 
     pub fn init(
         indices: []gl.uint,
         vertices: []Vertex,
         textures: []texture.Texture,
-    ) !Mesh {
+    ) Mesh {
         var VAO: [1]c_uint = undefined;
         var VBO: [1]c_uint = undefined;
         var EBO: [1]c_uint = undefined;
@@ -112,7 +113,7 @@ pub const Mesh = struct {
 
     pub fn draw(self: Mesh, shader_program: core.ShaderProgram, options: DrawOptions) !void {
         try shader_program.setBool("u_is_textured", false);
-        if (options.use_textures) {
+        if (options.use_textures and self.textures.len > 0) {
             // TODO: Move the texture parameters somewhere else!
             gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_BORDER);
             gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_BORDER);
@@ -157,13 +158,9 @@ pub const Mesh = struct {
                 }
             }
             // TODO: Where do we store the shininess during model loading?
-            if (self.textures.len > 0) {
-                // Set u_is_textured = true
-                try shader_program.setTextureMaterial(texture_mat);
-            }
+            try shader_program.setTextureMaterial(texture_mat); // This also sets u_is_textured = true
         }
-        try shader_program.setMat4f("u_model", self.world_matrix.multiply(self.scaling), false); // Do not
-        // transpose because the matrix is already stored transposed in the GLTF model
+        try shader_program.setMat4f("u_model", self.world_matrix.multiply(self.scaling), self.is_row_major);
         gl.BindVertexArray(self.VAO);
         gl.DrawElements(gl.TRIANGLES, @as(c_int, @intCast(self.indices.len)), gl.UNSIGNED_INT, 0);
         gl.BindVertexArray(0); // Unbind for good measures!
@@ -175,7 +172,9 @@ pub const Mesh = struct {
     }
 
     pub fn scale(self: *Mesh, scalar: f32) void {
-        self.scaling = self.scaling.multiply(zm.Mat4f.scaling(scalar, scalar, scalar));
+        self.scaling.data[0] *= scalar;
+        self.scaling.data[5] *= scalar;
+        self.scaling.data[10] *= scalar;
     }
 
     pub fn deinit(self: Mesh, allocator: std.mem.Allocator) void {
@@ -431,12 +430,16 @@ pub const Model = struct {
                         std.debug.print("Material diffuse color is a texture\n", .{});
                     } else {
                         std.debug.print("material diffuse color is a factor\n", .{});
+                        std.debug.print("FACTORS NOT IMPLEMENTED!!!!\n", .{});
+                        // TODO: Load and store!
                     }
                     if (material.pbr_specular_glossiness.specular_glossiness_texture.texture) |tex| {
                         try textures.append(try self.load_texture(tex, .specular, allocator));
                         std.debug.print("Material specular-glossiness is a texture\n", .{});
                     } else {
                         std.debug.print("material specular-glossiness are factors\n", .{});
+                        std.debug.print("FACTORS NOT IMPLEMENTED!!!!\n", .{});
+                        // TODO: Load and store!
                     }
                 } else if (material.has_pbr_metallic_roughness == 1) {
                     // INFO: gLTF2.0 uses the PBR metallic-roughness material model. It's
@@ -449,12 +452,16 @@ pub const Model = struct {
                         std.debug.print("Material base color is a texture\n", .{});
                     } else {
                         std.debug.print("material base color is a factor\n", .{});
+                        std.debug.print("FACTORS NOT IMPLEMENTED!!!!\n", .{});
+                        // TODO: Load and store!
                     }
                     if (material.pbr_metallic_roughness.metallic_roughness_texture.texture) |tex| {
                         try textures.append(try self.load_texture(tex, .metalic_roughness, allocator));
                         std.debug.print("Material metalic roughness is a texture\n", .{});
                     } else {
                         std.debug.print("material metallic rougness are factors\n", .{});
+                        std.debug.print("FACTORS NOT IMPLEMENTED!!!!\n", .{});
+                        // TODO: Load and store!
                     }
                 } else {
                     log.err("Unable to load material {s}", .{material.name orelse "empty"});
@@ -463,11 +470,13 @@ pub const Model = struct {
             mesh_prim_progress.setCompletedItems(k);
         }
         std.debug.print("Initializing Mesh with {d} vertices...\n", .{vertices.items.len});
-        return try Mesh.init(
+        var gltf_mesh = Mesh.init(
             try indices.toOwnedSlice(),
             try vertices.toOwnedSlice(),
             try textures.toOwnedSlice(),
         );
+        gltf_mesh.is_row_major = false;
+        return gltf_mesh;
     }
 
     fn load_texture(
@@ -591,44 +600,58 @@ pub const Model = struct {
 
 pub const Primitive = struct {
     pub fn make_cube_mesh() Mesh {
-        const vertices: []gl.float = .{
-            -0.5, -0.5, -0.5, 0.0, 0.0,
-            0.5,  -0.5, -0.5, 1.0, 0.0,
-            0.5,  0.5,  -0.5, 1.0, 1.0,
-            0.5,  0.5,  -0.5, 1.0, 1.0,
-            -0.5, 0.5,  -0.5, 0.0, 1.0,
-            -0.5, -0.5, -0.5, 0.0, 0.0,
-            -0.5, -0.5, 0.5,  0.0, 0.0,
-            0.5,  -0.5, 0.5,  1.0, 0.0,
-            0.5,  0.5,  0.5,  1.0, 1.0,
-            0.5,  0.5,  0.5,  1.0, 1.0,
-            -0.5, 0.5,  0.5,  0.0, 1.0,
-            -0.5, -0.5, 0.5,  0.0, 0.0,
-            -0.5, 0.5,  0.5,  1.0, 0.0,
-            -0.5, 0.5,  -0.5, 1.0, 1.0,
-            -0.5, -0.5, -0.5, 0.0, 1.0,
-            -0.5, -0.5, -0.5, 0.0, 1.0,
-            -0.5, -0.5, 0.5,  0.0, 0.0,
-            -0.5, 0.5,  0.5,  1.0, 0.0,
-            0.5,  0.5,  0.5,  1.0, 0.0,
-            0.5,  0.5,  -0.5, 1.0, 1.0,
-            0.5,  -0.5, -0.5, 0.0, 1.0,
-            0.5,  -0.5, -0.5, 0.0, 1.0,
-            0.5,  -0.5, 0.5,  0.0, 0.0,
-            0.5,  0.5,  0.5,  1.0, 0.0,
-            -0.5, -0.5, -0.5, 0.0, 1.0,
-            0.5,  -0.5, -0.5, 1.0, 1.0,
-            0.5,  -0.5, 0.5,  1.0, 0.0,
-            0.5,  -0.5, 0.5,  1.0, 0.0,
-            -0.5, -0.5, 0.5,  0.0, 0.0,
-            -0.5, -0.5, -0.5, 0.0, 1.0,
-            -0.5, 0.5,  -0.5, 0.0, 1.0,
-            0.5,  0.5,  -0.5, 1.0, 1.0,
-            0.5,  0.5,  0.5,  1.0, 0.0,
-            0.5,  0.5,  0.5,  1.0, 0.0,
-            -0.5, 0.5,  0.5,  0.0, 0.0,
-            -0.5, 0.5,  -0.5, 0.0, 1.0,
+        const vertices: []const Vertex = &.{
+            // Back face
+            .{ .position = [3]gl.float{ -0.5, -0.5, -0.5 }, .texture_coords = [2]gl.float{ 0.0, 0.0 }, .normal = undefined }, // Bottom-left
+            .{ .position = [3]gl.float{ 0.5, 0.5, -0.5 }, .texture_coords = [2]gl.float{ 1.0, 1.0 }, .normal = undefined }, // top-right
+            .{ .position = [3]gl.float{ 0.5, -0.5, -0.5 }, .texture_coords = [2]gl.float{ 1.0, 0.0 }, .normal = undefined }, // bottom-right
+            .{ .position = [3]gl.float{ 0.5, 0.5, -0.5 }, .texture_coords = [2]gl.float{ 1.0, 1.0 }, .normal = undefined }, // top-right
+            .{ .position = [3]gl.float{ -0.5, -0.5, -0.5 }, .texture_coords = [2]gl.float{ 0.0, 0.0 }, .normal = undefined }, // bottom-left
+            .{ .position = [3]gl.float{ -0.5, 0.5, -0.5 }, .texture_coords = [2]gl.float{ 0.0, 1.0 }, .normal = undefined }, // top-left
+            // Front face
+            .{ .position = [3]gl.float{ -0.5, -0.5, 0.5 }, .texture_coords = [2]gl.float{ 0.0, 0.0 }, .normal = undefined }, // bottom-left
+            .{ .position = [3]gl.float{ 0.5, -0.5, 0.5 }, .texture_coords = [2]gl.float{ 1.0, 0.0 }, .normal = undefined }, // bottom-right
+            .{ .position = [3]gl.float{ 0.5, 0.5, 0.5 }, .texture_coords = [2]gl.float{ 1.0, 1.0 }, .normal = undefined }, // top-right
+            .{ .position = [3]gl.float{ 0.5, 0.5, 0.5 }, .texture_coords = [2]gl.float{ 1.0, 1.0 }, .normal = undefined }, // top-right
+            .{ .position = [3]gl.float{ -0.5, 0.5, 0.5 }, .texture_coords = [2]gl.float{ 0.0, 1.0 }, .normal = undefined }, // top-left
+            .{ .position = [3]gl.float{ -0.5, -0.5, 0.5 }, .texture_coords = [2]gl.float{ 0.0, 0.0 }, .normal = undefined }, // bottom-left
+            // Left face
+            .{ .position = [3]gl.float{ -0.5, 0.5, 0.5 }, .texture_coords = [2]gl.float{ 1.0, 0.0 }, .normal = undefined }, // top-right
+            .{ .position = [3]gl.float{ -0.5, 0.5, -0.5 }, .texture_coords = [2]gl.float{ 1.0, 1.0 }, .normal = undefined }, // top-left
+            .{ .position = [3]gl.float{ -0.5, -0.5, -0.5 }, .texture_coords = [2]gl.float{ 0.0, 1.0 }, .normal = undefined }, // bottom-left
+            .{ .position = [3]gl.float{ -0.5, -0.5, -0.5 }, .texture_coords = [2]gl.float{ 0.0, 1.0 }, .normal = undefined }, // bottom-left
+            .{ .position = [3]gl.float{ -0.5, -0.5, 0.5 }, .texture_coords = [2]gl.float{ 0.0, 0.0 }, .normal = undefined }, // bottom-right
+            .{ .position = [3]gl.float{ -0.5, 0.5, 0.5 }, .texture_coords = [2]gl.float{ 1.0, 0.0 }, .normal = undefined }, // top-right
+            // Right face
+            .{ .position = [3]gl.float{ 0.5, 0.5, 0.5 }, .texture_coords = [2]gl.float{ 1.0, 0.0 }, .normal = undefined }, // top-left
+            .{ .position = [3]gl.float{ 0.5, -0.5, -0.5 }, .texture_coords = [2]gl.float{ 0.0, 1.0 }, .normal = undefined }, // bottom-right
+            .{ .position = [3]gl.float{ 0.5, 0.5, -0.5 }, .texture_coords = [2]gl.float{ 1.0, 1.0 }, .normal = undefined }, // top-right
+            .{ .position = [3]gl.float{ 0.5, -0.5, -0.5 }, .texture_coords = [2]gl.float{ 0.0, 1.0 }, .normal = undefined }, // bottom-right
+            .{ .position = [3]gl.float{ 0.5, 0.5, 0.5 }, .texture_coords = [2]gl.float{ 1.0, 0.0 }, .normal = undefined }, // top-left
+            .{ .position = [3]gl.float{ 0.5, -0.5, 0.5 }, .texture_coords = [2]gl.float{ 0.0, 0.0 }, .normal = undefined }, // bottom-left
+            // Bottom face
+            .{ .position = [3]gl.float{ -0.5, -0.5, -0.5 }, .texture_coords = [2]gl.float{ 0.0, 1.0 }, .normal = undefined }, // top-right
+            .{ .position = [3]gl.float{ 0.5, -0.5, -0.5 }, .texture_coords = [2]gl.float{ 1.0, 1.0 }, .normal = undefined }, // top-left
+            .{ .position = [3]gl.float{ 0.5, -0.5, 0.5 }, .texture_coords = [2]gl.float{ 1.0, 0.0 }, .normal = undefined }, // bottom-left
+            .{ .position = [3]gl.float{ 0.5, -0.5, 0.5 }, .texture_coords = [2]gl.float{ 1.0, 0.0 }, .normal = undefined }, // bottom-left
+            .{ .position = [3]gl.float{ -0.5, -0.5, 0.5 }, .texture_coords = [2]gl.float{ 0.0, 0.0 }, .normal = undefined }, // bottom-right
+            .{ .position = [3]gl.float{ -0.5, -0.5, -0.5 }, .texture_coords = [2]gl.float{ 0.0, 1.0 }, .normal = undefined }, // top-right
+            // Top face
+            .{ .position = [3]gl.float{ -0.5, 0.5, -0.5 }, .texture_coords = [2]gl.float{ 0.0, 1.0 }, .normal = undefined }, // top-left
+            .{ .position = [3]gl.float{ 0.5, 0.5, 0.5 }, .texture_coords = [2]gl.float{ 1.0, 0.0 }, .normal = undefined }, // bottom-right
+            .{ .position = [3]gl.float{ 0.5, 0.5, -0.5 }, .texture_coords = [2]gl.float{ 1.0, 1.0 }, .normal = undefined }, // top-right
+            .{ .position = [3]gl.float{ 0.5, 0.5, 0.5 }, .texture_coords = [2]gl.float{ 1.0, 0.0 }, .normal = undefined }, // bottom-right
+            .{ .position = [3]gl.float{ -0.5, 0.5, -0.5 }, .texture_coords = [2]gl.float{ 0.0, 1.0 }, .normal = undefined }, // top-left
+            .{ .position = [3]gl.float{ -0.5, 0.5, 0.5 }, .texture_coords = [2]gl.float{ 0.0, 0.0 }, .normal = undefined }, // bottom-left
         };
-        return Mesh.init(.{}, vertices, .{});
+        const indices: []const gl.uint = &.{
+            0,  1,  2,  3,  4,  5,
+            6,  7,  8,  9,  10, 11,
+            12, 13, 14, 15, 16, 17,
+            18, 19, 20, 21, 22, 23,
+            24, 25, 26, 27, 28, 29,
+            30, 31, 32, 33, 34, 35,
+        };
+        return Mesh.init(@constCast(indices), @constCast(vertices), &.{});
     }
 };

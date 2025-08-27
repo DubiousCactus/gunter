@@ -143,8 +143,8 @@ pub fn main() !void {
     };
     std.debug.print("Done!\n", .{});
 
-    // const cube_model: model.Mesh = model.Primitive.make_cube_mesh();
-    // defer cube_model.deinit();
+    var cube_model: model.Mesh = model.Primitive.make_cube_mesh();
+    defer cube_model.deinit(allocator);
 
     const skybox = try scene.SkyBox.init(allocator, "textures/skybox");
     defer skybox.deinit();
@@ -180,15 +180,12 @@ pub fn main() !void {
                 .linear = 0.09,
                 .quadratic = 0.032,
             });
-            // cube_model.world_matrix = cube_model.scale(0.1);
-            // cube_model.draw(active_shader_program);
-            // gl.BindVertexArray(light_cube_vao);
-            // try active_shader_program.setMat4f(
-            //     "u_model",
-            //     zm.Mat4f.translationVec3(light_pos),
-            //     true,
-            // );
-            // gl.DrawArrays(gl.TRIANGLES, 0, 36);
+            // TODO: Move the cube into a PointLight class? Then we can pass in less
+            // parameters and parameterize rendering the cube.
+            cube_model.set_scale(0.5);
+            cube_model.world_matrix = zm.Mat4f.translationVec3(light_pos);
+            // cube_model.scale(0.2);
+            try cube_model.draw(active_shader_program, .{ .use_textures = false });
         }
         try active_shader_program.setSpotLight(.{
             .position = camera.translation,
