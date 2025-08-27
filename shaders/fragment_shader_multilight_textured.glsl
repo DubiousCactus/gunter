@@ -55,24 +55,26 @@ uniform SpotLight u_spot_light;
 
 uniform vec3 u_cam_pos;
 uniform bool u_is_source;
-uniform bool u_is_textured;
+uniform bool u_has_diffuse_texture;
+uniform bool u_has_specular_texture;
 
 vec3 computeDirectionalLight(DirectionalLight light, vec3 normal,
                              vec3 view_dir) {
   vec3 light_dir = normalize(-light.direction);
   vec3 diffuse =
       max(dot(normal, light_dir), 0.0) *
-      (u_is_textured ? texture(u_material.diffuse, io_text_coords).rgb
-                     : vec3(1.0)) *
+      (u_has_diffuse_texture ? texture(u_material.diffuse, io_text_coords).rgb
+                             : vec3(1.0)) *
       light.diffuse;
   vec3 ambient =
-      light.ambient * (u_is_textured
+      light.ambient * (u_has_diffuse_texture
                            ? texture(u_material.diffuse, io_text_coords).rgb
                            : vec3(1));
   vec3 specular =
       pow(max(dot(reflect(-light_dir, normal), view_dir), 0.0),
           u_material.shininess) *
-      (u_is_textured ? texture(u_material.specular, io_text_coords).r : 1.0) *
+      (u_has_specular_texture ? texture(u_material.specular, io_text_coords).r
+                              : 0.0) *
       light.specular;
   return ambient + diffuse + specular;
 }
@@ -82,17 +84,18 @@ vec3 computePointLight(PointLight light, vec3 normal, vec3 frag_pos,
   vec3 light_dir = normalize(light.position - frag_pos);
   vec3 diffuse =
       max(dot(normal, light_dir), 0.0) *
-      (u_is_textured ? texture(u_material.diffuse, io_text_coords).rgb
-                     : vec3(1.0)) *
+      (u_has_diffuse_texture ? texture(u_material.diffuse, io_text_coords).rgb
+                             : vec3(1.0)) *
       light.diffuse;
   vec3 ambient =
-      light.ambient * (u_is_textured
+      light.ambient * (u_has_diffuse_texture
                            ? texture(u_material.diffuse, io_text_coords).rgb
                            : vec3(1.0));
   vec3 specular =
       pow(max(dot(reflect(-light_dir, normal), view_dir), 0.0),
           u_material.shininess) *
-      (u_is_textured ? texture(u_material.specular, io_text_coords).r : 1.0) *
+      (u_has_specular_texture ? texture(u_material.specular, io_text_coords).r
+                              : 0.0) *
       light.specular;
   float dist = length(frag_pos - light.position);
   float attenuation = 1.0 / (light.constant + light.linear * dist +
@@ -104,7 +107,7 @@ vec3 computeSpotLight(SpotLight light, vec3 normal, vec3 frag_pos,
                       vec3 view_dir) {
   vec3 incoming_light_dir = normalize(light.position - frag_pos);
   vec3 ambient =
-      light.ambient * (u_is_textured
+      light.ambient * (u_has_diffuse_texture
                            ? texture(u_material.diffuse, io_text_coords).rgb
                            : vec3(1));
 
@@ -116,13 +119,14 @@ vec3 computeSpotLight(SpotLight light, vec3 normal, vec3 frag_pos,
 
   vec3 diffuse =
       max(dot(normal, incoming_light_dir), 0.0) *
-      (u_is_textured ? texture(u_material.diffuse, io_text_coords).rgb
-                     : vec3(1)) *
+      (u_has_diffuse_texture ? texture(u_material.diffuse, io_text_coords).rgb
+                             : vec3(1)) *
       light.diffuse;
   vec3 specular =
       pow(max(dot(reflect(-incoming_light_dir, normal), view_dir), 0.0),
           u_material.shininess) *
-      (u_is_textured ? texture(u_material.specular, io_text_coords).r : 1.0) *
+      (u_has_specular_texture ? texture(u_material.specular, io_text_coords).r
+                              : 0.0) *
       light.specular;
 
   float dist = length(frag_pos - light.position);
@@ -133,6 +137,8 @@ vec3 computeSpotLight(SpotLight light, vec3 normal, vec3 frag_pos,
 
 void main() {
   if (u_is_source) {
+    // TODO: Bloom effect
+    // TODO: use the point light's diffuse or ambient colour?
     o_frag_color = vec4(1.0, 1.0, 1.0, 1.0);
   } else {
     vec3 normal = normalize(io_normal);
@@ -151,8 +157,10 @@ void main() {
     total_light +=
         computeSpotLight(u_spot_light, normal, io_frag_w_pos, view_dir);
 
-    vec4 tex_color = texture(u_material.diffuse, io_text_coords);
-    o_frag_color = vec4(total_light, tex_color.a);
+    float alpha = u_has_diffuse_texture
+                      ? texture(u_material.diffuse, io_text_coords).a
+                      : 1.0;
+    o_frag_color = vec4(total_light, alpha);
 
     // float near = 0.1;
     // float far = 100.0;

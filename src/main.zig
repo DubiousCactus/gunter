@@ -99,17 +99,19 @@ pub fn main() !void {
     //     allocator,
     //     .load_entire_scene,
     // );
-    // var my_model = try model.Model.init(
-    //     "/Users/cactus/Code/learning-opengl/assets/guitar-backpack/scene.gltf",
-    //     allocator,
-    //     .load_entire_scene,
-    // );
-    // my_model.set_scale(0.01);
-    var my_model = try model.Model.init(
-        "/Users/cactus/Code/gunter/assets/blender/test_scene.gltf",
+    var backpack = try model.Model.init(
+        "/Users/cactus/Code/gunter/assets/guitar-backpack/scene.gltf",
         allocator,
         .load_entire_scene,
     );
+    backpack.set_scale(0.01);
+    defer backpack.deinit(allocator);
+    // backpack.world_matrix = zm.Mat4f.translation(0, -1.5, 4);
+    // var my_model = try model.Model.init(
+    //     "/Users/cactus/Code/gunter/assets/blender/test_scene.gltf",
+    //     allocator,
+    //     .load_entire_scene,
+    // );
     // var my_model = try model.Model.init(
     //     "/Users/cactus/Code/learning-opengl/assets/thingy/scene.gltf",
     //     allocator,
@@ -131,7 +133,7 @@ pub fn main() !void {
     //     .load_root_mesh_only,
     // );
     // my_model.scale(1);
-    defer my_model.deinit(allocator);
+    // defer my_model.deinit(allocator);
     std.debug.print("Model loaded! Drawing...\n", .{});
 
     const projection_mat = zm.Mat4f.perspective(45, 1, 0.1, 1000);
@@ -206,10 +208,12 @@ pub fn main() !void {
             .specular = zm.Vec3f{ 1.0, 1.0, 1.0 },
         });
 
-        // gl.BindVertexArray(light_cube_vao);
-        // gl.DrawArrays(gl.TRIANGLES, 0, 36);
         try active_shader_program.setBool("u_is_source", false);
-        try my_model.draw(active_shader_program, .{
+        // try my_model.draw(active_shader_program, .{
+        //     .highlight = false,
+        //     .highlight_shader = &highlight_shader_program,
+        // }, camera.getViewMat(), projection_mat);
+        try backpack.draw(active_shader_program, .{
             .highlight = false,
             .highlight_shader = &highlight_shader_program,
         }, camera.getViewMat(), projection_mat);

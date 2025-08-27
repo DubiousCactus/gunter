@@ -112,7 +112,8 @@ pub const Mesh = struct {
     }
 
     pub fn draw(self: Mesh, shader_program: core.ShaderProgram, options: DrawOptions) !void {
-        try shader_program.setBool("u_is_textured", false);
+        try shader_program.setBool("u_has_diffuse_texture", false);
+        try shader_program.setBool("u_has_specular_texture", false);
         if (options.use_textures and self.textures.len > 0) {
             // TODO: Move the texture parameters somewhere else!
             gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_BORDER);
@@ -124,8 +125,8 @@ pub const Mesh = struct {
             // FIXME: Things start to break if the texture indices are beyond activated
             // textures. But what if I don't have the diffuse or the specular?
             var texture_mat = core.TextureMaterial{
-                .diffuse_texture_index = 0,
-                .specular_texture_index = 1,
+                .diffuse_texture_index = undefined,
+                .specular_texture_index = undefined,
                 .shininess = 32.0,
             };
             for (self.textures, 0..) |tex, i| {
@@ -144,6 +145,7 @@ pub const Mesh = struct {
                             std.debug.print("Hey man we don't handle multiple textures per material. Only 1 diffuse and 1 specular allowed bro it's what it is.\n", .{});
                             return error.TooManyTextures;
                         }
+                        try shader_program.setBool("u_has_diffuse_texture", true);
                         texture_mat.diffuse_texture_index = @as(i32, @intCast(i));
                         diffuse_nr += 1;
                     },
@@ -152,13 +154,14 @@ pub const Mesh = struct {
                             std.debug.print("Hey man we don't handle multiple textures per material. Only 1 diffuse and 1 specular allowed bro it's what it is.\n", .{});
                             return error.TooManyTextures;
                         }
+                        try shader_program.setBool("u_has_specular_texture", true);
                         texture_mat.specular_texture_index = @as(i32, @intCast(i));
                         specular_nr += 1;
                     },
                 }
             }
             // TODO: Where do we store the shininess during model loading?
-            try shader_program.setTextureMaterial(texture_mat); // This also sets u_is_textured = true
+            try shader_program.setTextureMaterial(texture_mat);
         }
         try shader_program.setMat4f("u_model", self.world_matrix.multiply(self.scaling), self.is_row_major);
         gl.BindVertexArray(self.VAO);
