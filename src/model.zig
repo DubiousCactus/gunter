@@ -14,6 +14,7 @@ pub const DrawOptions = struct {
     sort_all_meshes: bool = false,
     highlight: bool = false,
     highlight_shader: ?*const core.ShaderProgram = null,
+    enable_face_culling: bool = false,
 };
 
 pub fn mat4f_from_array(arr: [16]f32) zm.Mat4f {
@@ -164,10 +165,15 @@ pub const Mesh = struct {
             try shader_program.setTextureMaterial(texture_mat);
         }
         try shader_program.setMat4f("u_model", self.world_matrix.multiply(self.scaling), self.is_row_major);
+        if (options.enable_face_culling) {
+            gl.Enable(gl.CULL_FACE);
+            gl.CullFace(gl.BACK);
+        }
         gl.BindVertexArray(self.VAO);
         gl.DrawElements(gl.TRIANGLES, @as(c_int, @intCast(self.indices.len)), gl.UNSIGNED_INT, 0);
         gl.BindVertexArray(0); // Unbind for good measures!
         gl.ActiveTexture(gl.TEXTURE0); // Reset for good measures!
+        gl.Disable(gl.CULL_FACE);
     }
 
     pub fn set_scale(self: *Mesh, scalar: f32) void {

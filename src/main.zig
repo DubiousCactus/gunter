@@ -99,19 +99,20 @@ pub fn main() !void {
     //     allocator,
     //     .load_entire_scene,
     // );
-    var backpack = try model.Model.init(
-        "/Users/cactus/Code/gunter/assets/guitar-backpack/scene.gltf",
-        allocator,
-        .load_entire_scene,
-    );
-    backpack.set_scale(0.01);
-    defer backpack.deinit(allocator);
-    // backpack.world_matrix = zm.Mat4f.translation(0, -1.5, 4);
-    // var my_model = try model.Model.init(
-    //     "/Users/cactus/Code/gunter/assets/blender/test_scene.gltf",
+    // var backpack = try model.Model.init(
+    //     "/Users/cactus/Code/gunter/assets/guitar-backpack/scene.gltf",
     //     allocator,
     //     .load_entire_scene,
     // );
+    // backpack.set_scale(0.01);
+    // defer backpack.deinit(allocator);
+    // backpack.world_matrix = zm.Mat4f.translation(0, -1.5, 4);
+    var my_model = try model.Model.init(
+        "/Users/cactus/Code/gunter/assets/blender/test_scene.gltf",
+        allocator,
+        .load_entire_scene,
+    );
+    defer my_model.deinit(allocator);
     // var my_model = try model.Model.init(
     //     "/Users/cactus/Code/learning-opengl/assets/thingy/scene.gltf",
     //     allocator,
@@ -133,7 +134,6 @@ pub fn main() !void {
     //     .load_root_mesh_only,
     // );
     // my_model.scale(1);
-    // defer my_model.deinit(allocator);
     std.debug.print("Model loaded! Drawing...\n", .{});
 
     const projection_mat = zm.Mat4f.perspective(45, 1, 0.1, 1000);
@@ -187,7 +187,7 @@ pub fn main() !void {
             cube_model.set_scale(0.5);
             cube_model.world_matrix = zm.Mat4f.translationVec3(light_pos);
             // cube_model.scale(0.2);
-            try cube_model.draw(active_shader_program, .{ .use_textures = false });
+            try cube_model.draw(active_shader_program, .{ .use_textures = false, .enable_face_culling = true });
         }
         try active_shader_program.setSpotLight(.{
             .position = camera.translation,
@@ -213,9 +213,10 @@ pub fn main() !void {
         //     .highlight = false,
         //     .highlight_shader = &highlight_shader_program,
         // }, camera.getViewMat(), projection_mat);
-        try backpack.draw(active_shader_program, .{
+        try my_model.draw(active_shader_program, .{
             .highlight = false,
             .highlight_shader = &highlight_shader_program,
+            .enable_face_culling = true,
         }, camera.getViewMat(), projection_mat);
 
         context.window.swapBuffers(); // Swap the color buffer used to render at this frame and
