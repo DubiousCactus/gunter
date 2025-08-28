@@ -33,7 +33,15 @@ pub fn main() !void {
     });
     defer context.destroy(allocator);
     var ticker = try core.Ticker.init();
-    var camera = scene.Camera{ .translation = zm.Vec3f{ 0, 0, -6 }, .ticker = &ticker };
+    var camera = scene.Camera.init(
+        &ticker,
+        zm.Vec3f{ 0, 0, -6 },
+        45,
+        screen_w,
+        screen_h,
+        0.1,
+        100.0,
+    );
     var input_handler = input.InputHandler.init(&camera);
 
     context.window.setUserPointer(&input_handler);
@@ -136,7 +144,6 @@ pub fn main() !void {
     // my_model.scale(1);
     std.debug.print("Model loaded! Drawing...\n", .{});
 
-    const projection_mat = zm.Mat4f.perspective(45, 1, 0.1, 1000);
     const point_lights = [_]zm.Vec3f{
         zm.Vec3f{ 0.7, 0.2, 2.0 },
         zm.Vec3f{ 2.3, -3.3, -4.0 },
@@ -160,7 +167,7 @@ pub fn main() !void {
         ticker.tick();
 
         if (input_handler.scene == .skybox) {
-            try skybox.draw(camera.getSkyboxViewMat(), projection_mat);
+            try skybox.draw(camera.getSkyboxViewMat(), camera.projection_mat);
         }
 
         multilight_textured_shader_program.use();
@@ -168,7 +175,7 @@ pub fn main() !void {
         // we need to transpose to go column-major (OpenGL) since zm is
         // row-major.
         try active_shader_program.setMat4f("u_view", camera.getViewMat(), true);
-        try active_shader_program.setMat4f("u_proj", projection_mat, true);
+        try active_shader_program.setMat4f("u_proj", camera.projection_mat, true);
 
         try active_shader_program.setBool("u_is_source", true);
         try active_shader_program.setVec3f("u_cam_pos", camera.translation);
@@ -217,7 +224,7 @@ pub fn main() !void {
             .highlight = false,
             .highlight_shader = &highlight_shader_program,
             .enable_face_culling = true,
-        }, camera.getViewMat(), projection_mat);
+        }, camera.getViewMat(), camera.projection_mat);
 
         context.window.swapBuffers(); // Swap the color buffer used to render at this frame and
         // show it in the window.

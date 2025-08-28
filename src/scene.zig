@@ -11,6 +11,11 @@ const texture = @import("texture.zig");
 
 pub const Camera = struct {
     translation: zm.Vec3f,
+    fov: f32,
+    screen_w: i32,
+    screen_h: i32,
+    near: f32,
+    far: f32,
     pitch_yaw_speed: f32 = 0.1,
     yaw: f32 = 90.0,
     pitch: f32 = 0.0,
@@ -21,11 +26,23 @@ pub const Camera = struct {
     front: zm.Vec3f = -zm.vec.forward(f32),
     strife_speed: f32 = 25,
     ticker: *core.Ticker,
+    projection_mat: zm.Mat4f,
 
-    pub fn init(ticker: *core.Ticker, translation: ?zm.Vec3f) Camera {
+    pub fn init(ticker: *core.Ticker, translation: ?zm.Vec3f, fov: f32, screen_w: i32, screen_h: i32, near: ?f32, far: ?f32) Camera {
         return Camera{
             .ticker = ticker,
             .translation = translation orelse zm.vec.zero(3, f32),
+            .fov = fov,
+            .screen_w = screen_w,
+            .screen_h = screen_h,
+            .near = near orelse 0.1,
+            .far = far orelse 100.0,
+            .projection_mat = zm.Mat4f.perspective(
+                fov,
+                @as(f32, @floatFromInt(screen_w)) / @as(f32, @floatFromInt(screen_h)),
+                near orelse 0.1,
+                far orelse 100.0,
+            ),
         };
     }
 
