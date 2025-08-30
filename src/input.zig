@@ -31,7 +31,14 @@ pub const InputHandler = struct {
         self.cam.mouseCallback(x, y);
     }
 
-    pub fn keyCallback(self: *InputHandler, window: glfw.Window, key: glfw.Key, scancode: i32, action: glfw.Action, mods: glfw.Mods) void {
+    pub fn keyCallback(
+        self: *InputHandler,
+        window: glfw.Window,
+        key: glfw.Key,
+        scancode: i32,
+        action: glfw.Action,
+        mods: glfw.Mods,
+    ) void {
         _ = scancode;
         _ = mods;
 

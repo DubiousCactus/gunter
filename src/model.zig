@@ -210,6 +210,7 @@ pub const Model = struct {
     path: []const u8,
     directory: []const u8,
     loaded_textures: std.StringHashMap(texture.Texture),
+    root_progress_node: *std.Progress.Node,
 
     pub const Error = error{
         NotImplementedError,
@@ -220,7 +221,12 @@ pub const Model = struct {
         load_root_mesh_only,
     };
 
-    pub fn init(path: [:0]const u8, allocator: std.mem.Allocator, mode: LoadingMode) !Model {
+    pub fn init(
+        path: [:0]const u8,
+        allocator: std.mem.Allocator,
+        context: *core.Context,
+        mode: LoadingMode,
+    ) !Model {
         std.debug.print("Loading asset: '{s}'...\n", .{path});
         zmesh.init(allocator);
         defer zmesh.deinit();
@@ -239,6 +245,7 @@ pub const Model = struct {
             .directory = std.mem.sliceTo(directory, 0),
             .path = path,
             .loaded_textures = std.StringHashMap(texture.Texture).init(allocator),
+            .root_progress_node = &context.progress_node,
         };
         switch (mode) {
             .load_entire_scene => {
@@ -252,10 +259,8 @@ pub const Model = struct {
     }
 
     fn load_entire_scene(self: *Model, data: *zmesh.io.zcgltf.Data, allocator: std.mem.Allocator) !void {
-        var root_progress = std.Progress.start(.{});
-        defer root_progress.end();
         std.debug.print("\t[*]Parsing the scene...\n", .{});
-        var scene_progress = root_progress.start("Parsing the scene", 0);
+        var scene_progress = self.root_progress_node.start("Parsing the scene", 0);
         defer scene_progress.end();
         if (data.scene) |main_scene| {
             std.debug.print("Scene has {d} nodes\n", .{main_scene.nodes_count});

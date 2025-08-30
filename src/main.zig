@@ -107,17 +107,19 @@ pub fn main() !void {
     //     allocator,
     //     .load_entire_scene,
     // );
-    // var backpack = try model.Model.init(
-    //     "/Users/cactus/Code/gunter/assets/guitar-backpack/scene.gltf",
-    //     allocator,
-    //     .load_entire_scene,
-    // );
-    // backpack.setScale(0.01);
-    // defer backpack.deinit(allocator);
+    var backpack = try model.Model.init(
+        "/Users/cactus/Code/gunter/assets/guitar-backpack/scene.gltf",
+        allocator,
+        &context,
+        .load_entire_scene,
+    );
+    backpack.setScale(0.01);
+    defer backpack.deinit(allocator);
     // backpack.world_matrix = zm.Mat4f.translation(0, -1.5, 4);
     var my_scene = try model.Model.init(
         "/Users/cactus/Code/gunter/assets/blender/test_scene.gltf",
         allocator,
+        &context,
         .load_entire_scene,
     );
     if (my_scene.findByName("Suzanne")) |mesh| {
@@ -233,10 +235,10 @@ pub fn main() !void {
         });
 
         try active_shader_program.setBool("u_is_source", false);
-        // try my_model.draw(active_shader_program, .{
-        //     .highlight = false,
-        //     .highlight_shader = &highlight_shader_program,
-        // }, camera.getViewMat(), projection_mat);
+        try backpack.draw(active_shader_program, .{
+            .highlight = false,
+            .highlight_shader = &highlight_shader_program,
+        }, camera.getViewMat(), camera.projection_mat);
         try my_scene.draw(active_shader_program, .{
             .highlight = false,
             .highlight_shader = &highlight_shader_program,

@@ -333,6 +333,7 @@ pub const ContextOptions = struct {
 
 pub const Context = struct {
     window: glfw.Window,
+    progress_node: std.Progress.Node,
 
     /// Procedure table that will hold loaded OpenGL functions.
     gl_procs: *gl.ProcTable,
@@ -380,6 +381,7 @@ pub const Context = struct {
         return Context{
             .window = window,
             .gl_procs = gl_procs,
+            .progress_node = std.Progress.start(.{}),
         };
     }
 
@@ -389,6 +391,7 @@ pub const Context = struct {
         glfw.makeContextCurrent(null);
         self.window.destroy();
         glfw.terminate();
+        self.progress_node.end();
     }
 };
 
