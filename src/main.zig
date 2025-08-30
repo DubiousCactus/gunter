@@ -112,15 +112,32 @@ pub fn main() !void {
     //     allocator,
     //     .load_entire_scene,
     // );
-    // backpack.set_scale(0.01);
+    // backpack.setScale(0.01);
     // defer backpack.deinit(allocator);
     // backpack.world_matrix = zm.Mat4f.translation(0, -1.5, 4);
-    var my_model = try model.Model.init(
+    var my_scene = try model.Model.init(
         "/Users/cactus/Code/gunter/assets/blender/test_scene.gltf",
         allocator,
         .load_entire_scene,
     );
-    defer my_model.deinit(allocator);
+    if (my_scene.findByName("Suzanne")) |mesh| {
+        mesh.setRenderOptions(.{
+            .enable_face_culling = true,
+            .use_textures = false,
+            .highlight = true,
+            .highlight_shader = &highlight_shader_program,
+        });
+    } else |err| {
+        std.debug.print("Couldn't find Suzanne mesh in the scene!\n", .{});
+        return err;
+    }
+    if (my_scene.findByName("Cube")) |mesh| {
+        mesh.setRenderOptions(.{ .enable_face_culling = true });
+    } else |err| {
+        std.debug.print("Couldn't find Suzanne mesh in the scene!\n", .{});
+        return err;
+    }
+    defer my_scene.deinit(allocator);
     // var my_model = try model.Model.init(
     //     "/Users/cactus/Code/learning-opengl/assets/thingy/scene.gltf",
     //     allocator,
@@ -191,7 +208,7 @@ pub fn main() !void {
             });
             // TODO: Move the cube into a PointLight class? Then we can pass in less
             // parameters and parameterize rendering the cube.
-            cube_model.set_scale(0.5);
+            cube_model.setScale(0.5);
             cube_model.world_matrix = zm.Mat4f.translationVec3(light_pos);
             // cube_model.scale(0.2);
             try cube_model.draw(active_shader_program, .{ .use_textures = false, .enable_face_culling = true });
@@ -220,7 +237,7 @@ pub fn main() !void {
         //     .highlight = false,
         //     .highlight_shader = &highlight_shader_program,
         // }, camera.getViewMat(), projection_mat);
-        try my_model.draw(active_shader_program, .{
+        try my_scene.draw(active_shader_program, .{
             .highlight = false,
             .highlight_shader = &highlight_shader_program,
             .enable_face_culling = true,

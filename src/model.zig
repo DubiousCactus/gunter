@@ -39,10 +39,11 @@ pub const Mesh = struct {
     VAO: c_uint,
     VBO: c_uint,
     EBO: c_uint,
-    name: [*:0]const u8 = undefined,
+    name: []const u8 = undefined,
     world_matrix: zm.Mat4f = zm.Mat4f.identity(),
     scaling: zm.Mat4f = zm.Mat4f.identity(),
     is_row_major: bool = true, // zm is row-major, OpenGL is column-major
+    render_options: DrawOptions = .{},
 
     pub fn init(
         indices: []gl.uint,
@@ -176,7 +177,7 @@ pub const Mesh = struct {
         gl.Disable(gl.CULL_FACE);
     }
 
-    pub fn set_scale(self: *Mesh, scalar: f32) void {
+    pub fn setScale(self: *Mesh, scalar: f32) void {
         self.scaling = zm.Mat4f.scaling(scalar, scalar, scalar);
     }
 
@@ -184,6 +185,10 @@ pub const Mesh = struct {
         self.scaling.data[0] *= scalar;
         self.scaling.data[5] *= scalar;
         self.scaling.data[10] *= scalar;
+    }
+
+    pub fn setRenderOptions(self: *Mesh, render_options: DrawOptions) void {
+        self.render_options = render_options;
     }
 
     pub fn deinit(self: Mesh, allocator: std.mem.Allocator) void {
@@ -196,6 +201,7 @@ pub const Mesh = struct {
         }
         allocator.free(self.vertices);
         allocator.free(self.indices);
+        allocator.free(self.name);
     }
 };
 
@@ -306,7 +312,10 @@ pub const Model = struct {
                 progress_node,
             );
             processed_mesh.world_matrix = mat4f_from_array(node.transformWorld());
-            processed_mesh.name = node.name orelse "noname";
+            const node_name: []const u8 = std.mem.span(node.name orelse "noname");
+            processed_mesh.name = try allocator.allocSentinel(u8, node_name.len, 0);
+            std.mem.copyForwards(u8, @constCast(processed_mesh.name), node_name);
+            std.debug.print("Loaded mesh '{s}'\n", .{processed_mesh.name});
             try self.meshes.append(processed_mesh);
             progress_node.setCompletedItems(self.meshes.items.len);
         }
@@ -537,9 +546,9 @@ pub const Model = struct {
         return texture_out;
     }
 
-    pub fn set_scale(self: *Model, scalar: f32) void {
+    pub fn setScale(self: *Model, scalar: f32) void {
         for (self.meshes.items) |*mesh| {
-            mesh.set_scale(scalar);
+            mesh.setScale(scalar);
         }
     }
 
@@ -547,6 +556,16 @@ pub const Model = struct {
         for (self.meshes.items) |*mesh| {
             mesh.scale(scalar);
         }
+    }
+
+    pub fn findByName(self: Model, name: []const u8) !*Mesh {
+        for (self.meshes.items) |*mesh| {
+            std.debug.print("Comparing '{s}' with '{s}'\n", .{ mesh.name, name });
+            if (std.mem.eql(u8, mesh.name, name)) {
+                return mesh;
+            }
+        }
+        return error.MeshNotFound;
     }
 
     pub fn draw(
