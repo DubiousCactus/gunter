@@ -112,6 +112,7 @@ pub fn main() !void {
         allocator,
         &context,
         .load_entire_scene,
+        "backpack",
     );
     backpack.setScale(0.01);
     defer backpack.deinit(allocator);
@@ -121,10 +122,11 @@ pub fn main() !void {
         allocator,
         &context,
         .load_entire_scene,
+        "blender_scene",
     );
     if (my_scene.findByName("Suzanne")) |mesh| {
-        mesh.setRenderOptions(.{
-            .enable_face_culling = true,
+        mesh.setDrawOptions(.{
+            .enable_face_culling = false,
             .use_textures = false,
             .highlight = true,
             .highlight_shader = &highlight_shader_program,
@@ -134,7 +136,13 @@ pub fn main() !void {
         return err;
     }
     if (my_scene.findByName("Cube")) |mesh| {
-        mesh.setRenderOptions(.{ .enable_face_culling = true });
+        mesh.setDrawOptions(.{ .enable_face_culling = true });
+    } else |err| {
+        std.debug.print("Couldn't find Suzanne mesh in the scene!\n", .{});
+        return err;
+    }
+    if (my_scene.findByName("Plane")) |mesh| {
+        mesh.setDrawOptions(.{ .draw = true });
     } else |err| {
         std.debug.print("Couldn't find Suzanne mesh in the scene!\n", .{});
         return err;
@@ -235,14 +243,14 @@ pub fn main() !void {
         });
 
         try active_shader_program.setBool("u_is_source", false);
-        try backpack.draw(active_shader_program, .{
-            .highlight = false,
-            .highlight_shader = &highlight_shader_program,
-        }, camera.getViewMat(), camera.projection_mat);
+        // try backpack.draw(active_shader_program, .{
+        //     .highlight = false,
+        //     .highlight_shader = &highlight_shader_program,
+        // }, camera.getViewMat(), camera.projection_mat);
         try my_scene.draw(active_shader_program, .{
             .highlight = false,
             .highlight_shader = &highlight_shader_program,
-            .enable_face_culling = true,
+            .enable_face_culling = false,
         }, camera.getViewMat(), camera.projection_mat);
 
         context.window.swapBuffers(); // Swap the color buffer used to render at this frame and

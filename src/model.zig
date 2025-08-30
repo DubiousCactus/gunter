@@ -10,6 +10,7 @@ const gl_log = std.log.scoped(.gl);
 const log = std.log;
 
 pub const DrawOptions = struct {
+    draw: bool = true,
     use_textures: bool = true,
     sort_all_meshes: bool = false,
     highlight: bool = false,
@@ -43,7 +44,7 @@ pub const Mesh = struct {
     world_matrix: zm.Mat4f = zm.Mat4f.identity(),
     scaling: zm.Mat4f = zm.Mat4f.identity(),
     is_row_major: bool = true, // zm is row-major, OpenGL is column-major
-    render_options: DrawOptions = .{},
+    draw_options: DrawOptions = .{},
 
     pub fn init(
         indices: []gl.uint,
@@ -113,10 +114,11 @@ pub const Mesh = struct {
         };
     }
 
-    pub fn draw(self: Mesh, shader_program: core.ShaderProgram, options: DrawOptions) !void {
-        try shader_program.setBool("u_has_diffuse_texture", false);
-        try shader_program.setBool("u_has_specular_texture", false);
-        if (options.use_textures and self.textures.len > 0) {
+    pub fn draw(self: Mesh, shader_program: core.ShaderProgram, global_options: DrawOptions) !void {
+        if (!self.draw_options.draw) {
+            return;
+        }
+        if (global_options.use_textures and self.textures.len > 0) {
             // TODO: Move the texture parameters somewhere else!
             gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_BORDER);
             gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_BORDER);
@@ -165,8 +167,12 @@ pub const Mesh = struct {
             // TODO: Where do we store the shininess during model loading?
             try shader_program.setTextureMaterial(texture_mat);
         }
-        try shader_program.setMat4f("u_model", self.world_matrix.multiply(self.scaling), self.is_row_major);
-        if (options.enable_face_culling) {
+        if (!self.is_row_major) {
+            try shader_program.setMat4f("u_model", self.world_matrix.transpose().multiply(self.scaling).transpose(), false);
+        } else {
+            try shader_program.setMat4f("u_model", self.world_matrix.multiply(self.scaling), true);
+        }
+        if (global_options.enable_face_culling) {
             gl.Enable(gl.CULL_FACE);
             gl.CullFace(gl.BACK);
         }
@@ -182,13 +188,14 @@ pub const Mesh = struct {
     }
 
     pub fn scale(self: *Mesh, scalar: f32) void {
+        // NOTE: New ZM library allows self.scaling.scale(scalar);
         self.scaling.data[0] *= scalar;
         self.scaling.data[5] *= scalar;
         self.scaling.data[10] *= scalar;
     }
 
-    pub fn setRenderOptions(self: *Mesh, render_options: DrawOptions) void {
-        self.render_options = render_options;
+    pub fn setDrawOptions(self: *Mesh, draw_options: DrawOptions) void {
+        self.draw_options = draw_options;
     }
 
     pub fn deinit(self: Mesh, allocator: std.mem.Allocator) void {
@@ -211,6 +218,7 @@ pub const Model = struct {
     directory: []const u8,
     loaded_textures: std.StringHashMap(texture.Texture),
     root_progress_node: *std.Progress.Node,
+    root_name: []const u8,
 
     pub const Error = error{
         NotImplementedError,
@@ -226,6 +234,7 @@ pub const Model = struct {
         allocator: std.mem.Allocator,
         context: *core.Context,
         mode: LoadingMode,
+        root_name: []const u8,
     ) !Model {
         std.debug.print("Loading asset: '{s}'...\n", .{path});
         zmesh.init(allocator);
@@ -246,6 +255,7 @@ pub const Model = struct {
             .path = path,
             .loaded_textures = std.StringHashMap(texture.Texture).init(allocator),
             .root_progress_node = &context.progress_node,
+            .root_name = root_name,
         };
         switch (mode) {
             .load_entire_scene => {
@@ -498,7 +508,7 @@ pub const Model = struct {
             try vertices.toOwnedSlice(),
             try textures.toOwnedSlice(),
         );
-        gltf_mesh.is_row_major = false;
+        gltf_mesh.is_row_major = false; // OpenGL is column major, and so are gLTF assets
         return gltf_mesh;
     }
 
@@ -565,7 +575,6 @@ pub const Model = struct {
 
     pub fn findByName(self: Model, name: []const u8) !*Mesh {
         for (self.meshes.items) |*mesh| {
-            std.debug.print("Comparing '{s}' with '{s}'\n", .{ mesh.name, name });
             if (std.mem.eql(u8, mesh.name, name)) {
                 return mesh;
             }
@@ -589,13 +598,44 @@ pub const Model = struct {
         if (options.sort_all_meshes) {
             // Useful for transparency. Since we don't have a consistent way of tagging
             // which objects are transparent when loading a whole scene, we'll sort them
-            // all for now. But in the future, we need a mechanism to improve this, or
+            // all for now (we do now!). But in the future, we need a mechanism to improve this, or
             // to implement order independent transparency.
             return error.NotImplementedError;
             // TODO: Use MultiArrayList.sort()
         }
-        for (self.meshes.items) |mesh| {
+        for (self.meshes.items) |*mesh| {
+            if (mesh.draw_options.highlight) {
+                gl.Enable(gl.STENCIL_TEST);
+                gl.StencilOp(gl.KEEP, gl.KEEP, gl.REPLACE); // Only update the stencil buffer if we pass the test.
+                gl.StencilFunc(gl.ALWAYS, 1, 0xFF); // Always pass and write  1
+                gl.StencilMask(0xFF); // Enable writing
+            }
+            try shader_program.setBool("u_has_diffuse_texture", false);
+            try shader_program.setBool("u_has_specular_texture", false);
             try mesh.draw(shader_program, options);
+
+            if (mesh.draw_options.highlight) {
+                if (mesh.draw_options.highlight_shader == null) {
+                    log.err("highlight shader not provided", .{});
+                    return error.HighlightShaderNotProvided;
+                }
+                gl.StencilFunc(gl.NOTEQUAL, 1, 0xFF); // Pass test if not equal to 1
+                gl.StencilMask(0x00); // Disable writing
+                gl.Disable(gl.DEPTH_TEST);
+                mesh.draw_options.highlight_shader.?.use();
+                try mesh.draw_options.highlight_shader.?.setMat4f("u_view", view_mat, true);
+                try mesh.draw_options.highlight_shader.?.setMat4f("u_proj", proj_mat, true);
+                self.scale(1.05);
+                // mesh.setScale(2);
+                try mesh.draw(mesh.draw_options.highlight_shader.?.*, .{ .use_textures = false }); // FIXME: copy other options?
+                gl.StencilMask(0xFF); // Enable writing
+                gl.StencilFunc(gl.ALWAYS, 1, 0xFF); // Always pass and write  1
+                gl.Enable(gl.DEPTH_TEST);
+                shader_program.use();
+                self.scale(1.0 / 1.05);
+                // mesh.setScale(1.0);
+                gl.Disable(gl.STENCIL_TEST);
+            }
         }
         if (options.highlight) {
             if (options.highlight_shader == null) {
