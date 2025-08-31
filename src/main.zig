@@ -220,8 +220,9 @@ pub fn main() !void {
             });
             // TODO: Move the cube into a PointLight class? Then we can pass in less
             // parameters and parameterize rendering the cube.
-            cube_mesh.scale(0.5);
-            cube_mesh.translate(light_pos);
+            cube_mesh.setModelMatrix(zm.Mat4f.translationVec3(light_pos).multiply(
+                zm.Mat4f.scaling(0.5, 0.5, 0.5),
+            ));
             try cube_mesh.draw(
                 active_shader_program,
                 .{ .use_textures = false, .enable_face_culling = true },

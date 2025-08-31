@@ -201,6 +201,10 @@ pub const Mesh = struct {
         self.model_matrix = zm.Mat4f.fromQuaternion(rotation).multiply(self.model_matrix);
     }
 
+    pub fn setModelMatrix(self: *Mesh, matrix: zm.Mat4f) void {
+        self.model_matrix = matrix;
+    }
+
     pub fn setDrawOptions(self: *Mesh, draw_options: DrawOptions) void {
         self.draw_options = draw_options;
     }
