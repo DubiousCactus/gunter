@@ -193,7 +193,6 @@ pub fn main() !void {
     while (!context.window.shouldClose()) {
         gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT); // Clear the color and z buffers. TODO: Should be in the context if we do more similar stuff
         input_handler.consume(context.window);
-        ticker.tick();
 
         if (input_handler.scene == .skybox) {
             try skybox.draw(camera.getSkyboxViewMat(), camera.projection_mat);
@@ -266,6 +265,7 @@ pub fn main() !void {
         // the screen, we use a double buffer approach. It's simply one buffer where we
         // put the data (the back buffer), and one buffer that is full and ready to draw
         // (the front buffer).
+        ticker.tick();
         glfw.pollEvents(); // checks if any events are triggered, updates the window
         // state and calls the corresponding functions which we can register via
         // callbacks.

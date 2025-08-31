@@ -396,7 +396,7 @@ pub const Context = struct {
 };
 
 pub const Ticker = struct {
-    last_frame: u64 = 0,
+    frame_times: [3]u64 = [3]u64{ 0, 0, 0 },
     timer: std.time.Timer,
     frame_delta: u64,
 
@@ -406,8 +406,10 @@ pub const Ticker = struct {
 
     pub fn tick(self: *Ticker) void {
         const time = self.timer.read();
-        self.frame_delta = time - self.last_frame;
-        self.last_frame = time;
+        self.frame_times[2] = self.frame_times[1]; // t-2
+        self.frame_times[1] = self.frame_times[0]; // t-1
+        self.frame_times[0] = time; // t
+        self.frame_delta = self.frame_times[1] - self.frame_times[2]; // t-1 - t-2, lag=1
     }
 
     pub fn deltaSeconds(self: Ticker) f64 {
