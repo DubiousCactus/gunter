@@ -126,7 +126,7 @@ pub fn main() !void {
     );
     if (my_scene.findByName("Suzanne")) |mesh| {
         mesh.setDrawOptions(.{
-            .enable_face_culling = false,
+            .enable_face_culling = true,
             .use_textures = false,
             .highlight = false,
             .highlight_shader = &highlight_shader_program,
@@ -249,6 +249,7 @@ pub fn main() !void {
 
         try active_shader_program.setBool("u_is_source", false);
         try backpack.draw(active_shader_program, .{
+            .enable_face_culling = true,
             .highlight = false,
             .highlight_shader = &highlight_shader_program,
         }, camera.getViewMat(), camera.projection_mat);

@@ -178,7 +178,7 @@ pub const Mesh = struct {
             model_matrix = val.multiply(self.model_matrix);
         }
         try shader_program.setMat4f("u_model", model_matrix, true); // Transpose for OpenGL which is column-major!
-        if (global_options.enable_face_culling) {
+        if (global_options.enable_face_culling or self.draw_options.enable_face_culling) {
             gl.Enable(gl.CULL_FACE);
             gl.CullFace(gl.BACK);
         }
