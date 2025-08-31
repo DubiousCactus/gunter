@@ -114,9 +114,9 @@ pub fn main() !void {
         .load_entire_scene,
         "backpack",
     );
-    backpack.setScale(0.01);
+    backpack.scale(0.01);
+    backpack.translate(zm.Vec3f{ 0, 2.5, 4 });
     defer backpack.deinit(allocator);
-    // backpack.world_matrix = zm.Mat4f.translation(0, -1.5, 4);
     var my_scene = try model.Model.init(
         "/Users/cactus/Code/gunter/assets/blender/test_scene.gltf",
         allocator,
@@ -128,9 +128,11 @@ pub fn main() !void {
         mesh.setDrawOptions(.{
             .enable_face_culling = false,
             .use_textures = false,
-            .highlight = true,
+            .highlight = false,
             .highlight_shader = &highlight_shader_program,
         });
+        mesh.translate(zm.Vec3f{ 3, 2, -5 });
+        mesh.scale(2);
     } else |err| {
         std.debug.print("Couldn't find Suzanne mesh in the scene!\n", .{});
         return err;
@@ -179,8 +181,8 @@ pub fn main() !void {
     };
     std.debug.print("Done!\n", .{});
 
-    var cube_model: model.Mesh = model.Primitive.make_cube_mesh();
-    defer cube_model.deinit(allocator);
+    var cube_mesh: model.Mesh = model.Primitive.make_cube_mesh();
+    defer cube_mesh.deinit(allocator);
 
     const skybox = try scene.SkyBox.init(allocator, "textures/skybox");
     defer skybox.deinit();
@@ -218,10 +220,13 @@ pub fn main() !void {
             });
             // TODO: Move the cube into a PointLight class? Then we can pass in less
             // parameters and parameterize rendering the cube.
-            cube_model.setScale(0.5);
-            cube_model.world_matrix = zm.Mat4f.translationVec3(light_pos);
-            // cube_model.scale(0.2);
-            try cube_model.draw(active_shader_program, .{ .use_textures = false, .enable_face_culling = true });
+            cube_mesh.scale(0.5);
+            cube_mesh.translate(light_pos);
+            try cube_mesh.draw(
+                active_shader_program,
+                .{ .use_textures = false, .enable_face_culling = true },
+                undefined,
+            );
         }
         try active_shader_program.setSpotLight(.{
             .position = camera.translation,
@@ -243,10 +248,10 @@ pub fn main() !void {
         });
 
         try active_shader_program.setBool("u_is_source", false);
-        // try backpack.draw(active_shader_program, .{
-        //     .highlight = false,
-        //     .highlight_shader = &highlight_shader_program,
-        // }, camera.getViewMat(), camera.projection_mat);
+        try backpack.draw(active_shader_program, .{
+            .highlight = false,
+            .highlight_shader = &highlight_shader_program,
+        }, camera.getViewMat(), camera.projection_mat);
         try my_scene.draw(active_shader_program, .{
             .highlight = false,
             .highlight_shader = &highlight_shader_program,

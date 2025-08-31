@@ -41,9 +41,10 @@ pub const Mesh = struct {
     VBO: c_uint,
     EBO: c_uint,
     name: []const u8 = undefined,
-    world_matrix: zm.Mat4f = zm.Mat4f.identity(),
-    scaling: zm.Mat4f = zm.Mat4f.identity(),
-    is_row_major: bool = true, // zm is row-major, OpenGL is column-major
+    model_matrix: zm.Mat4f = zm.Mat4f.identity(),
+    // scaling: zm.Vec3f = zm.vec.Vec3f.one(),
+    // translation: zm.Vec3f = zm.vec.zero(3, f32),
+    // rotation: zm.Quaternionf = zm.quaternion.QuaternionBase(f32).identity(),
     draw_options: DrawOptions = .{},
 
     pub fn init(
@@ -114,7 +115,12 @@ pub const Mesh = struct {
         };
     }
 
-    pub fn draw(self: Mesh, shader_program: core.ShaderProgram, global_options: DrawOptions) !void {
+    pub fn draw(
+        self: Mesh,
+        shader_program: core.ShaderProgram,
+        global_options: DrawOptions,
+        world_matrix: ?zm.Mat4f,
+    ) !void {
         if (!self.draw_options.draw) {
             return;
         }
@@ -167,11 +173,11 @@ pub const Mesh = struct {
             // TODO: Where do we store the shininess during model loading?
             try shader_program.setTextureMaterial(texture_mat);
         }
-        if (!self.is_row_major) {
-            try shader_program.setMat4f("u_model", self.world_matrix.transpose().multiply(self.scaling).transpose(), false);
-        } else {
-            try shader_program.setMat4f("u_model", self.world_matrix.multiply(self.scaling), true);
+        var model_matrix: zm.Mat4f = self.model_matrix;
+        if (world_matrix) |val| {
+            model_matrix = val.multiply(self.model_matrix);
         }
+        try shader_program.setMat4f("u_model", model_matrix, true); // Transpose for OpenGL which is column-major!
         if (global_options.enable_face_culling) {
             gl.Enable(gl.CULL_FACE);
             gl.CullFace(gl.BACK);
@@ -183,15 +189,16 @@ pub const Mesh = struct {
         gl.Disable(gl.CULL_FACE);
     }
 
-    pub fn setScale(self: *Mesh, scalar: f32) void {
-        self.scaling = zm.Mat4f.scaling(scalar, scalar, scalar);
+    pub fn scale(self: *Mesh, scalar: f32) void {
+        self.model_matrix = self.model_matrix.multiply(zm.Mat4f.scaling(scalar, scalar, scalar));
     }
 
-    pub fn scale(self: *Mesh, scalar: f32) void {
-        // NOTE: New ZM library allows self.scaling.scale(scalar);
-        self.scaling.data[0] *= scalar;
-        self.scaling.data[5] *= scalar;
-        self.scaling.data[10] *= scalar;
+    pub fn translate(self: *Mesh, translation: zm.Vec3f) void {
+        self.model_matrix = zm.Mat4f.translationVec3(translation).multiply(self.model_matrix);
+    }
+
+    pub fn rotate(self: *Mesh, rotation: zm.Quaternionf) void {
+        self.model_matrix = zm.Mat4f.fromQuaternion(rotation).multiply(self.model_matrix);
     }
 
     pub fn setDrawOptions(self: *Mesh, draw_options: DrawOptions) void {
@@ -219,6 +226,11 @@ pub const Model = struct {
     loaded_textures: std.StringHashMap(texture.Texture),
     root_progress_node: *std.Progress.Node,
     root_name: []const u8,
+
+    _world_matrix: zm.Mat4f = zm.Mat4f.identity(),
+    scaling: zm.Mat4f = zm.Mat4f.identity(),
+    rotation: zm.Mat4f = zm.Mat4f.identity(),
+    translation: zm.Mat4f = zm.Mat4f.identity(),
 
     pub const Error = error{
         NotImplementedError,
@@ -326,7 +338,7 @@ pub const Model = struct {
                 allocator,
                 progress_node,
             );
-            processed_mesh.world_matrix = mat4f_from_array(node.transformWorld());
+            processed_mesh.model_matrix = mat4f_from_array(node.transformWorld()).transpose(); // OpenGL is column major, and so are gLTF assets
             const node_name: []const u8 = std.mem.span(node.name orelse "noname");
             processed_mesh.name = try allocator.allocSentinel(u8, node_name.len, 0);
             std.mem.copyForwards(u8, @constCast(processed_mesh.name), node_name);
@@ -503,13 +515,11 @@ pub const Model = struct {
             mesh_prim_progress.setCompletedItems(k);
         }
         std.debug.print("Initializing Mesh with {d} vertices...\n", .{vertices.items.len});
-        var gltf_mesh = Mesh.init(
+        return Mesh.init(
             try indices.toOwnedSlice(),
             try vertices.toOwnedSlice(),
             try textures.toOwnedSlice(),
         );
-        gltf_mesh.is_row_major = false; // OpenGL is column major, and so are gLTF assets
-        return gltf_mesh;
     }
 
     fn load_texture(
@@ -561,16 +571,19 @@ pub const Model = struct {
         return texture_out;
     }
 
-    pub fn setScale(self: *Model, scalar: f32) void {
-        for (self.meshes.items) |*mesh| {
-            mesh.setScale(scalar);
-        }
+    pub fn scale(self: *Model, scalar: f32) void {
+        self.scaling = zm.Mat4f.scaling(scalar, scalar, scalar);
+        self._world_matrix = self.rotation.multiply(self.translation.multiply(self.scaling));
     }
 
-    pub fn scale(self: *Model, scalar: f32) void {
-        for (self.meshes.items) |*mesh| {
-            mesh.scale(scalar);
-        }
+    pub fn translate(self: *Model, t: zm.Vec3f) void {
+        self.translation = zm.Mat4f.translationVec3(t);
+        self._world_matrix = self.rotation.multiply(self.translation.multiply(self.scaling));
+    }
+
+    pub fn rotate(self: *Model, quaternion: zm.Quaternionf) void {
+        self.rotation = zm.Mat4f.fromQuaternion(quaternion);
+        self._world_matrix = self.rotation.multiply(self.translation.multiply(self.scaling));
     }
 
     pub fn findByName(self: Model, name: []const u8) !*Mesh {
@@ -589,6 +602,9 @@ pub const Model = struct {
         view_mat: zm.Mat4f,
         proj_mat: zm.Mat4f,
     ) !void {
+        // TODO: Refactor the Mesh struct into a SceneNode struct to clean up operations
+        // such as highlighting. Basically implement a scene tree with operations on it
+        // like findByName().
         if (options.highlight) {
             gl.Enable(gl.STENCIL_TEST);
             gl.StencilOp(gl.KEEP, gl.KEEP, gl.REPLACE); // Only update the stencil buffer if we pass the test.
@@ -603,7 +619,7 @@ pub const Model = struct {
             return error.NotImplementedError;
             // TODO: Use MultiArrayList.sort()
         }
-        for (self.meshes.items) |*mesh| {
+        for (self.meshes.items) |mesh| {
             if (mesh.draw_options.highlight) {
                 gl.Enable(gl.STENCIL_TEST);
                 gl.StencilOp(gl.KEEP, gl.KEEP, gl.REPLACE); // Only update the stencil buffer if we pass the test.
@@ -612,7 +628,7 @@ pub const Model = struct {
             }
             try shader_program.setBool("u_has_diffuse_texture", false);
             try shader_program.setBool("u_has_specular_texture", false);
-            try mesh.draw(shader_program, options);
+            try mesh.draw(shader_program, options, self._world_matrix);
 
             if (mesh.draw_options.highlight) {
                 if (mesh.draw_options.highlight_shader == null) {
@@ -627,7 +643,11 @@ pub const Model = struct {
                 try mesh.draw_options.highlight_shader.?.setMat4f("u_proj", proj_mat, true);
                 self.scale(1.05);
                 // mesh.setScale(2);
-                try mesh.draw(mesh.draw_options.highlight_shader.?.*, .{ .use_textures = false }); // FIXME: copy other options?
+                try mesh.draw(
+                    mesh.draw_options.highlight_shader.?.*,
+                    .{ .use_textures = false },
+                    self._world_matrix,
+                ); // FIXME: copy other options?
                 gl.StencilMask(0xFF); // Enable writing
                 gl.StencilFunc(gl.ALWAYS, 1, 0xFF); // Always pass and write  1
                 gl.Enable(gl.DEPTH_TEST);
@@ -650,7 +670,11 @@ pub const Model = struct {
             try options.highlight_shader.?.setMat4f("u_proj", proj_mat, true);
             self.scale(1.05);
             for (self.meshes.items) |mesh| {
-                try mesh.draw(options.highlight_shader.?.*, .{ .use_textures = false }); // FIXME:
+                try mesh.draw(
+                    options.highlight_shader.?.*,
+                    .{ .use_textures = false },
+                    self._world_matrix,
+                ); // FIXME:
                 // copy other options?
             }
             gl.StencilMask(0xFF); // Enable writing
