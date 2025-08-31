@@ -8,125 +8,165 @@ const zignal = @import("zignal");
 const gl_log = std.log.scoped(.gl);
 const log = std.log;
 
+pub const TextureError = error{
+    NoImageProvided,
+};
+
 pub const TextureType = enum {
+    framebuffer,
     diffuse,
     specular,
     base_color,
     metalic_roughness,
+    cubemap,
 };
 
 pub const Texture = struct {
     id: c_uint,
     type_: TextureType,
-    path: [*:0]const u8,
+    path: ?[]const u8,
     use_mipmaps: bool,
+
+    pub fn init(type_: TextureType, use_mipmaps: bool) Texture {
+        var tbo: [1]c_uint = undefined;
+        gl.GenTextures(1, &tbo);
+        std.debug.print("Generated texture buffer object with id={d}\n", .{tbo[0]});
+        return .{
+            .id = tbo[0],
+            .path = undefined,
+            .type_ = type_,
+            .use_mipmaps = use_mipmaps,
+        };
+    }
+
+    pub fn fill(self: Texture, data: [*]const u8, width: i32, height: i32, channels: u8) void {
+        gl.BindTexture(gl.TEXTURE_2D, self.id);
+        gl.TexImage2D(
+            gl.TEXTURE_2D,
+            0,
+            if (channels == 4) gl.RGBA else gl.RGB,
+            width,
+            height,
+            0,
+            if (channels == 4) gl.RGBA else gl.RGB,
+            gl.UNSIGNED_BYTE,
+            data,
+        );
+        if (self.use_mipmaps)
+            gl.GenerateMipmap(gl.TEXTURE_2D);
+
+        switch (self.type_) {
+            .framebuffer => {
+                gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+                gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+            },
+            else => {
+                gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_BORDER);
+                gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_BORDER);
+                gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+
+                // WARN: Reflect the use of mipmaps with the choice of generating mipmaps in
+                // the texture loading!! This is super important or it won't render textures.
+                gl.TexParameteri(
+                    gl.TEXTURE_2D,
+                    gl.TEXTURE_MIN_FILTER,
+                    if (self.use_mipmaps) gl.LINEAR_MIPMAP_LINEAR else gl.LINEAR,
+                );
+            },
+        }
+    }
+
+    pub fn fillCubeMap(
+        self: Texture,
+        data: [*]const u8,
+        width: i32,
+        height: i32,
+        channels: u8,
+        target_offset: u8,
+    ) void {
+        gl.BindTexture(gl.TEXTURE_CUBE_MAP, self.id);
+        gl.TexImage2D(
+            gl.TEXTURE_CUBE_MAP_POSITIVE_X + @as(c_uint, @intCast(target_offset)),
+            0,
+            if (channels == 4) gl.RGBA else gl.RGB,
+            width,
+            height,
+            0,
+            if (channels == 4) gl.RGBA else gl.RGB,
+            gl.UNSIGNED_BYTE,
+            data,
+        );
+        if (self.use_mipmaps) { // WARN: Needed for cube maps??
+            log.err("Mipmaps shouldn't be used for cubemaps!\n", .{});
+            unreachable;
+        }
+        gl.TexParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MIN_FILTER, gl.LINEAR); // NOTE: Make sure to not use mipmaps for the skybox!
+        gl.TexParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.TexParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.TexParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.TexParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE);
+    }
+
+    pub fn loadCubeMapFromFile(
+        self: Texture,
+        file: std.fs.File,
+        flip_vertically: bool,
+        allocator: std.mem.Allocator,
+        target_offset: u8,
+    ) !void {
+        var image = try zigimg.Image.fromFile(allocator, @constCast(&file));
+        errdefer image.deinit();
+        defer image.deinit();
+        var pixel_data_ptr = image.rawBytes().ptr;
+        if (flip_vertically) {
+            var img = zignal.Image(zigimg.color.Rgb24).init(
+                image.width,
+                image.height,
+                @constCast(image.pixels.rgb24),
+            );
+            img.flipTopBottom();
+            pixel_data_ptr = img.asBytes().ptr;
+        }
+        const channels: u8 = if (image.pixelFormat().isRgba()) 4 else 3;
+        self.fillCubeMap(
+            pixel_data_ptr,
+            @as(c_int, @intCast(image.width)),
+            @as(c_int, @intCast(image.height)),
+            channels,
+            target_offset,
+        );
+    }
+
+    pub fn loadFromFile(
+        self: Texture,
+        file: std.fs.File,
+        flip_vertically: bool,
+        allocator: std.mem.Allocator,
+    ) !void {
+        var image = try zigimg.Image.fromFile(allocator, @constCast(&file));
+        errdefer image.deinit();
+        defer image.deinit();
+        var pixel_data_ptr = image.rawBytes().ptr;
+        if (flip_vertically) {
+            var img = zignal.Image(zigimg.color.Rgb24).init(
+                image.width,
+                image.height,
+                @constCast(image.pixels.rgb24),
+            );
+            img.flipTopBottom();
+            pixel_data_ptr = img.asBytes().ptr;
+        }
+        const channels: u8 = if (image.pixelFormat().isRgba()) 4 else 3;
+        self.fill(
+            pixel_data_ptr,
+            @as(c_int, @intCast(image.width)),
+            @as(c_int, @intCast(image.height)),
+            channels,
+        );
+    }
 
     pub fn deinit(self: Texture) void {
         var tbos: [1]c_uint = .{self.id};
         gl.DeleteTextures(1, &tbos);
     }
 };
-
-pub const TextureError = error{
-    NoImageProvided,
-};
-
-pub fn load_from_path(
-    file_name: []const u8,
-    gl_texture_type: c_uint,
-    TBO: c_uint,
-    target: c_uint,
-    generate_mipmap: bool,
-    flip_vertically: bool,
-    allocator: std.mem.Allocator,
-) !void {
-    const file = std.fs.cwd().openFile(file_name, .{}) catch |err| {
-        log.err("failed to open texture file: {?s}", .{file_name});
-        return err;
-    };
-    return try load_from_file(
-        file,
-        gl_texture_type,
-        TBO,
-        target,
-        generate_mipmap,
-        flip_vertically,
-        allocator,
-    );
-}
-
-pub fn load_from_file(
-    file: std.fs.File,
-    gl_texture_type: c_uint,
-    TBO: c_uint,
-    target: c_uint,
-    generate_mipmap: bool,
-    flip_vertically: bool,
-    allocator: std.mem.Allocator,
-) !void {
-    var image = try zigimg.Image.fromFile(allocator, @constCast(&file));
-    errdefer image.deinit();
-    defer image.deinit();
-    gl.BindTexture(gl_texture_type, TBO);
-    var pixel_data_ptr = image.rawBytes().ptr;
-    if (flip_vertically) {
-        var img = zignal.Image(zigimg.color.Rgb24).init(
-            image.width,
-            image.height,
-            @constCast(image.pixels.rgb24),
-        );
-        img.flipTopBottom();
-        pixel_data_ptr = img.asBytes().ptr;
-    }
-    gl.TexImage2D(
-        target,
-        0,
-        if (image.pixelFormat().isRgba()) gl.RGBA else gl.RGB,
-        @as(c_int, @intCast(image.width)),
-        @as(c_int, @intCast(image.height)),
-        0,
-        if (image.pixelFormat().isRgba()) gl.RGBA else gl.RGB,
-        gl.UNSIGNED_BYTE,
-        pixel_data_ptr,
-    );
-    if (generate_mipmap)
-        gl.GenerateMipmap(gl.TEXTURE_2D);
-}
-
-pub fn load_from_gltf_as_path(
-    path: [*:0]const u8,
-    root_dir: []const u8,
-    allocator: std.mem.Allocator,
-) !Texture {
-    var tbo: [1]c_uint = undefined;
-    gl.GenTextures(1, &tbo);
-    std.debug.print("Generated texture buffer object with id={d}\n", .{tbo[0]});
-
-    const use_mipmaps: bool = true;
-
-    std.debug.print("Loading texture from uri: {s}\n", .{path});
-    const dir = std.fs.cwd().openDir(root_dir, .{}) catch |err| {
-        log.err("failed to open directory: {?s}", .{root_dir});
-        return err;
-    };
-    const file = dir.openFile(std.mem.sliceTo(path, 0), .{}) catch |err| {
-        log.err("failed to open texture file: {?s}", .{path});
-        return err;
-    };
-    try load_from_file(
-        file,
-        gl.TEXTURE_2D,
-        tbo[0],
-        gl.TEXTURE_2D,
-        use_mipmaps,
-        false, // TODO: Figure out why NOT flipping the texture works! WTF?? Is gltf flipping the coordinates?
-        allocator,
-    );
-
-    return .{
-        .id = tbo[0],
-        .path = path,
-        .type_ = undefined,
-        .use_mipmaps = use_mipmaps,
-    };
-}

@@ -125,10 +125,6 @@ pub const Mesh = struct {
             return;
         }
         if (global_options.use_textures and self.textures.len > 0) {
-            // TODO: Move the texture parameters somewhere else!
-            gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_BORDER);
-            gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_BORDER);
-            gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
             // TODO: Handle more than one texture per material!
             var diffuse_nr: u8 = 1;
             var specular_nr: u8 = 1;
@@ -140,13 +136,6 @@ pub const Mesh = struct {
                 .shininess = 32.0,
             };
             for (self.textures, 0..) |tex, i| {
-                // WARN: Reflect the use of mipmaps with the choice of generating mipmaps in
-                // the texture loading!! This is super important or it won't render textures.
-                gl.TexParameteri(
-                    gl.TEXTURE_2D,
-                    gl.TEXTURE_MIN_FILTER,
-                    if (tex.use_mipmaps) gl.LINEAR_MIPMAP_LINEAR else gl.LINEAR,
-                );
                 gl.ActiveTexture(gl.TEXTURE0 + @as(c_uint, @intCast(i)));
                 gl.BindTexture(gl.TEXTURE_2D, tex.id);
                 switch (tex.type_) {
@@ -168,6 +157,7 @@ pub const Mesh = struct {
                         texture_mat.specular_texture_index = @as(i32, @intCast(i));
                         specular_nr += 1;
                     },
+                    else => {},
                 }
             }
             // TODO: Where do we store the shininess during model loading?
@@ -538,15 +528,31 @@ pub const Model = struct {
             return texture.TextureError.NoImageProvided;
         }
         std.debug.print("Loading texture '{s}' of type {}...\n", .{ gltf_texture.image.?.name orelse "noname", texture_type });
-        var texture_out: texture.Texture = undefined;
+        var texture_obj: texture.Texture = undefined;
+        errdefer texture_obj.deinit();
         if (gltf_texture.image.?.uri) |image_uri| {
             if (self.loaded_textures.get(std.mem.sliceTo(image_uri, 0))) |cached_texture| {
-                texture_out = cached_texture;
+                texture_obj = cached_texture;
                 std.debug.print("Using cache for '{s}\n", .{image_uri});
             } else {
-                texture_out = try texture.load_from_gltf_as_path(image_uri, self.directory, allocator);
-                texture_out.type_ = texture_type;
-                try self.loaded_textures.put(std.mem.sliceTo(image_uri, 0), texture_out);
+                texture_obj = texture.Texture.init(texture_type, true);
+
+                std.debug.print("Loading texture from uri: {s}\n", .{image_uri});
+                const dir = std.fs.cwd().openDir(self.directory, .{}) catch |err| {
+                    log.err("failed to open directory: {?s}", .{self.directory});
+                    return err;
+                };
+                const file = dir.openFile(std.mem.sliceTo(image_uri, 0), .{}) catch |err| {
+                    log.err("failed to open texture file: {?s}", .{image_uri});
+                    return err;
+                };
+                try texture_obj.loadFromFile(
+                    file,
+                    false, // TODO: Figure out why NOT flipping the texture works! WTF?? Is gltf flipping the coordinates?
+                    allocator,
+                );
+
+                try self.loaded_textures.put(std.mem.sliceTo(image_uri, 0), texture_obj);
             }
         } else if (gltf_texture.image.?.buffer_view) |buffer_view| {
             std.debug.print("Loading texture from buffer view\n", .{});
@@ -572,7 +578,7 @@ pub const Model = struct {
             _ = image_data;
             return error.NotImplementedError;
         }
-        return texture_out;
+        return texture_obj;
     }
 
     pub fn scale(self: *Model, scalar: f32) void {
