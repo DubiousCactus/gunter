@@ -15,7 +15,9 @@ So far, not very much. But I have big plans for Gunter:
 - [x] Model loading (gLTF)
 - [x] Phong illumination
 - [x] Multiple light sources
+- [x] Blending, face culling, mesh transformations
 - [x] Skybox
+- [ ] Environment maps
 - [ ] Geometry shaders
 - [ ] Instancing
 - [ ] Gamma correction
@@ -28,6 +30,7 @@ So far, not very much. But I have big plans for Gunter:
 - [ ] Text rendering
 - [ ] Animation
 - [ ] Particle system
+- [ ] Basic built-in physics system
 - [ ] Entity Component System
 - [ ] Audio
-- [ ] Build games with it
+- [ ] Build games/simulations with it
