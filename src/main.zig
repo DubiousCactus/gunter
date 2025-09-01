@@ -291,7 +291,7 @@ pub fn main() !void {
         try active_shader_program.setBool("u_is_source", false);
         try backpack.draw(active_shader_program, .{
             .enable_face_culling = true,
-            .highlight = false,
+            .highlight = true,
             .highlight_shader = &highlight_shader_program,
         }, camera.getViewMat(), camera.projection_mat, camera.translation);
         try my_scene.draw(active_shader_program, .{
