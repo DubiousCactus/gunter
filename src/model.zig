@@ -586,17 +586,17 @@ pub const Model = struct {
     }
 
     pub fn scale(self: *Model, scalar: f32) void {
-        self.scaling = zm.Mat4f.scaling(scalar, scalar, scalar);
+        self.scaling = zm.Mat4f.scaling(scalar, scalar, scalar).multiply(self.scaling);
         self._world_matrix = self.rotation.multiply(self.translation.multiply(self.scaling));
     }
 
     pub fn translate(self: *Model, t: zm.Vec3f) void {
-        self.translation = zm.Mat4f.translationVec3(t);
+        self.translation = zm.Mat4f.translationVec3(t).multiply(self.translation);
         self._world_matrix = self.rotation.multiply(self.translation.multiply(self.scaling));
     }
 
     pub fn rotate(self: *Model, quaternion: zm.Quaternionf) void {
-        self.rotation = zm.Mat4f.fromQuaternion(quaternion);
+        self.rotation = zm.Mat4f.fromQuaternion(quaternion).multiply(self.rotation);
         self._world_matrix = self.rotation.multiply(self.translation.multiply(self.scaling));
     }
 
@@ -662,7 +662,7 @@ pub const Model = struct {
                 mesh.draw_options.highlight_shader.?.use();
                 try mesh.draw_options.highlight_shader.?.setMat4f("u_view", view_mat, true);
                 try mesh.draw_options.highlight_shader.?.setMat4f("u_proj", proj_mat, true);
-                self.scale(1.05);
+                self.scale(1.02);
                 // mesh.setScale(2);
                 try mesh.draw(
                     mesh.draw_options.highlight_shader.?.*,
@@ -673,7 +673,7 @@ pub const Model = struct {
                 gl.StencilFunc(gl.ALWAYS, 1, 0xFF); // Always pass and write  1
                 gl.Enable(gl.DEPTH_TEST);
                 shader_program.use();
-                self.scale(1.0 / 1.05);
+                self.scale(1.0 / 1.02);
                 // mesh.setScale(1.0);
                 gl.Disable(gl.STENCIL_TEST);
             }
