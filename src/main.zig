@@ -13,6 +13,7 @@ const core = @import("core.zig");
 const scene = @import("scene.zig");
 const model = @import("model.zig");
 const input = @import("input.zig");
+const texture = @import("texture.zig");
 
 const screen_w = 1920;
 const screen_h = 1080;
@@ -70,24 +71,24 @@ pub fn main() !void {
     // ===================================================================================
     // ===================================== Shaders =====================================
     std.debug.print("Loading shaders...\n", .{});
-    const light_shader_program: core.ShaderProgram = try core.ShaderProgram.init(
-        allocator,
-        "shaders/vertex_shader_light.glsl",
-        "shaders/fragment_shader_light.glsl",
-    );
-    defer light_shader_program.delete();
-    const textured_shader_program: core.ShaderProgram = try core.ShaderProgram.init(
-        allocator,
-        "shaders/vertex_shader_light_textured.glsl",
-        "shaders/fragment_shader_pointlight_textured.glsl",
-    );
-    defer textured_shader_program.delete();
-    const spotlight_textured_shader_program: core.ShaderProgram = try core.ShaderProgram.init(
-        allocator,
-        "shaders/vertex_shader_light_textured.glsl",
-        "shaders/fragment_shader_spotlight_textured.glsl",
-    );
-    defer spotlight_textured_shader_program.delete();
+    // const light_shader_program: core.ShaderProgram = try core.ShaderProgram.init(
+    //     allocator,
+    //     "shaders/vertex_shader_light.glsl",
+    //     "shaders/fragment_shader_light.glsl",
+    // );
+    // defer light_shader_program.delete();
+    // const textured_shader_program: core.ShaderProgram = try core.ShaderProgram.init(
+    //     allocator,
+    //     "shaders/vertex_shader_light_textured.glsl",
+    //     "shaders/fragment_shader_pointlight_textured.glsl",
+    // );
+    // defer textured_shader_program.delete();
+    // const spotlight_textured_shader_program: core.ShaderProgram = try core.ShaderProgram.init(
+    //     allocator,
+    //     "shaders/vertex_shader_light_textured.glsl",
+    //     "shaders/fragment_shader_spotlight_textured.glsl",
+    // );
+    // defer spotlight_textured_shader_program.delete();
     const multilight_textured_shader_program: core.ShaderProgram = try core.ShaderProgram.init(
         allocator,
         "shaders/vertex_shader_light_textured.glsl",
@@ -100,6 +101,12 @@ pub fn main() !void {
         "shaders/fragment_shader_stencil_highlight.glsl",
     );
     defer highlight_shader_program.delete();
+    const frame_buffer_shader_program: core.ShaderProgram = try core.ShaderProgram.init(
+        allocator,
+        "shaders/vertex_shader_framebuffer.glsl",
+        "shaders/fragment_shader_framebuffer.glsl",
+    );
+    defer frame_buffer_shader_program.delete();
     // ===================================================================================
     // ============================ VBOS, VAOs, and VEOs =================================
     // var my_model = try model.Model.init(
@@ -181,32 +188,62 @@ pub fn main() !void {
     };
     std.debug.print("Done!\n", .{});
 
-    var cube_mesh: model.Mesh = model.Primitive.make_cube_mesh();
+    var cube_mesh: model.Mesh = model.Primitive.makeCubeMesh();
+    errdefer cube_mesh.deinit(allocator);
     defer cube_mesh.deinit(allocator);
 
     const skybox = try scene.SkyBox.init(allocator, "textures/skybox");
+    errdefer skybox.deinit();
     defer skybox.deinit();
+
+    // Framebuffer experiments: render the scene color info into a texture, and the
+    // depth and stencil info into a renderbuffer.
+    const frame_buffer = try core.Framebuffer.initWithTexture(
+        screen_w,
+        screen_h,
+        .{ .color = true },
+        .{ .depth = true, .stencil = true },
+    );
+    errdefer frame_buffer.deinit();
+    defer frame_buffer.deinit();
+    var plane: model.Mesh = model.Primitive.makePlaneMesh();
+    plane.setDrawOptions(.{ .use_textures = false, .enable_face_culling = false });
+    plane.scale(0.25);
+    plane.translate(zm.Vec3f{ 0.75, -0.75, 0 });
 
     gl.ClearColor(0.0, 0.0, 0.0, 1);
     var active_shader_program: core.ShaderProgram = multilight_textured_shader_program;
     // Wait for the user to close the window. This is the render loop!
     while (!context.window.shouldClose()) {
+        multilight_textured_shader_program.use();
+        active_shader_program = multilight_textured_shader_program;
+        // Render stuff into our framebuffer:
+        frame_buffer.bind();
+        frame_buffer.clear();
+        try active_shader_program.setBool("u_is_source", true);
+        try backpack.draw(active_shader_program, .{
+            .enable_face_culling = true,
+        }, camera.getViewMat(), camera.projection_mat, camera.translation);
+        frame_buffer.unbind(); // Restore default framebuffer
+
         gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT); // Clear the color and z buffers. TODO: Should be in the context if we do more similar stuff
         input_handler.consume(context.window);
+        if (input_handler.scene == .wireframe) {
+            gl.PolygonMode(gl.FRONT_AND_BACK, gl.LINE);
+        } else {
+            gl.PolygonMode(gl.FRONT_AND_BACK, gl.FILL);
+        }
 
         if (input_handler.scene == .skybox) {
             try skybox.draw(camera.getSkyboxViewMat(), camera.projection_mat);
         }
-
         multilight_textured_shader_program.use();
         active_shader_program = multilight_textured_shader_program;
+
         // we need to transpose to go column-major (OpenGL) since zm is
         // row-major.
-        try active_shader_program.setMat4f("u_view", camera.getViewMat(), true);
-        try active_shader_program.setMat4f("u_proj", camera.projection_mat, true);
-
         try active_shader_program.setBool("u_is_source", true);
-        try active_shader_program.setVec3f("u_cam_pos", camera.translation);
+        // try active_shader_program.setVec3f("u_cam_pos", camera.translation);
         for (point_lights, 0..) |light_pos, i| {
             try active_shader_program.setPointLight(@as(u8, @intCast(i)), .{
                 .position = light_pos,
@@ -222,6 +259,10 @@ pub fn main() !void {
             cube_mesh.setModelMatrix(zm.Mat4f.translationVec3(light_pos).multiply(
                 zm.Mat4f.scaling(0.5, 0.5, 0.5),
             ));
+            // FIXME: Use a root node for draw method
+            try active_shader_program.setMat4f("u_view", camera.getViewMat(), true);
+            try active_shader_program.setMat4f("u_proj", camera.projection_mat, true);
+            try active_shader_program.setVec3f("u_cam_pos", camera.translation);
             try cube_mesh.draw(
                 active_shader_program,
                 .{ .use_textures = false, .enable_face_culling = true },
@@ -252,12 +293,24 @@ pub fn main() !void {
             .enable_face_culling = true,
             .highlight = false,
             .highlight_shader = &highlight_shader_program,
-        }, camera.getViewMat(), camera.projection_mat);
+        }, camera.getViewMat(), camera.projection_mat, camera.translation);
         try my_scene.draw(active_shader_program, .{
             .highlight = false,
             .highlight_shader = &highlight_shader_program,
             .enable_face_culling = false,
-        }, camera.getViewMat(), camera.projection_mat);
+        }, camera.getViewMat(), camera.projection_mat, camera.translation);
+
+        // Draw the texture from the framebuffer:
+        frame_buffer_shader_program.use();
+        frame_buffer.texture_obj.?.bind(0);
+        try frame_buffer_shader_program.setInt("u_framebuffer_texture", 0);
+        context.pauseDepthTesting();
+        try plane.draw(frame_buffer_shader_program, .{
+            .use_textures = false,
+            .enable_face_culling = false,
+        }, undefined);
+        gl.ActiveTexture(gl.TEXTURE0); // Reset for good measures!
+        context.resumeDepthTesting();
 
         context.window.swapBuffers(); // Swap the color buffer used to render at this frame and
         // show it in the window.

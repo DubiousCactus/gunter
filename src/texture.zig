@@ -13,7 +13,10 @@ pub const TextureError = error{
 };
 
 pub const TextureType = enum {
-    framebuffer,
+    color_framebuffer,
+    depth_framebuffer,
+    stencil_framebuffer,
+    depth_stencil_framebuffer,
     diffuse,
     specular,
     base_color,
@@ -39,24 +42,49 @@ pub const Texture = struct {
         };
     }
 
-    pub fn fill(self: Texture, data: [*]const u8, width: i32, height: i32, channels: u8) void {
+    pub fn fill(self: Texture, width: i32, height: i32, channels: u8, data: ?[*]const u8) void {
         gl.BindTexture(gl.TEXTURE_2D, self.id);
+        var internal_format: c_int = undefined;
+        var pixel_format: c_int = undefined;
+        var data_type: c_uint = undefined;
+        switch (self.type_) {
+            .depth_framebuffer => {
+                internal_format = gl.DEPTH_COMPONENT;
+                pixel_format = internal_format;
+                data_type = gl.UNSIGNED_BYTE;
+            },
+            .stencil_framebuffer => {
+                internal_format = gl.STENCIL_INDEX;
+                pixel_format = internal_format;
+                data_type = gl.UNSIGNED_BYTE;
+            },
+            .depth_stencil_framebuffer => {
+                internal_format = gl.DEPTH24_STENCIL8;
+                pixel_format = gl.DEPTH_STENCIL;
+                data_type = gl.UNSIGNED_INT_24_8;
+            },
+            else => {
+                internal_format = if (channels == 4) gl.RGBA else gl.RGB;
+                pixel_format = internal_format;
+                data_type = gl.UNSIGNED_BYTE;
+            },
+        }
         gl.TexImage2D(
             gl.TEXTURE_2D,
             0,
-            if (channels == 4) gl.RGBA else gl.RGB,
+            internal_format,
             width,
             height,
             0,
-            if (channels == 4) gl.RGBA else gl.RGB,
-            gl.UNSIGNED_BYTE,
+            @as(c_uint, @intCast(pixel_format)),
+            data_type,
             data,
         );
         if (self.use_mipmaps)
             gl.GenerateMipmap(gl.TEXTURE_2D);
 
         switch (self.type_) {
-            .framebuffer => {
+            .color_framebuffer, .depth_framebuffer, .stencil_framebuffer => {
                 gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
                 gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
             },
@@ -74,6 +102,7 @@ pub const Texture = struct {
                 );
             },
         }
+        gl.BindTexture(gl.TEXTURE_2D, 0);
     }
 
     pub fn fillCubeMap(
@@ -105,6 +134,7 @@ pub const Texture = struct {
         gl.TexParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.TexParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
         gl.TexParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE);
+        gl.BindTexture(gl.TEXTURE_2D, 0);
     }
 
     pub fn loadCubeMapFromFile(
@@ -158,11 +188,19 @@ pub const Texture = struct {
         }
         const channels: u8 = if (image.pixelFormat().isRgba()) 4 else 3;
         self.fill(
-            pixel_data_ptr,
             @as(c_int, @intCast(image.width)),
             @as(c_int, @intCast(image.height)),
             channels,
+            pixel_data_ptr,
         );
+    }
+
+    pub fn bind(self: Texture, slot: c_uint) void {
+        gl.ActiveTexture(gl.TEXTURE0 + slot);
+        switch (self.type_) {
+            .cubemap => gl.BindTexture(gl.TEXTURE_CUBE_MAP, self.id),
+            else => gl.BindTexture(gl.TEXTURE_2D, self.id),
+        }
     }
 
     pub fn deinit(self: Texture) void {

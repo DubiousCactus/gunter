@@ -13,14 +13,12 @@ const scene = @import("scene.zig");
 
 pub const InputHandler = struct {
     cam: *scene.Camera,
-    scene: Scene = .no_skybox_textured,
+    scene: Scene = .no_skybox,
 
     pub const Scene = union(enum) {
         skybox,
-        no_skybox_raw,
-        no_skybox_textured,
-        no_skybox_textured_spotlight,
-        no_skybox_textured_multilight,
+        no_skybox,
+        wireframe,
     };
 
     pub fn init(cam: *scene.Camera) InputHandler {
@@ -49,16 +47,10 @@ pub const InputHandler = struct {
                     self.scene = .skybox;
                 },
                 .two => {
-                    self.scene = .no_skybox_raw;
+                    self.scene = .no_skybox;
                 },
                 .three => {
-                    self.scene = .no_skybox_textured;
-                },
-                .four => {
-                    self.scene = .no_skybox_textured_spotlight;
-                },
-                .five => {
-                    self.scene = .no_skybox_textured_multilight;
+                    self.scene = .wireframe;
                 },
                 else => {},
             }

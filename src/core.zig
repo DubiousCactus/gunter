@@ -4,6 +4,8 @@ const gl = @import("gl");
 const zigimg = @import("zigimg");
 const zm = @import("zm");
 
+const texture = @import("texture.zig");
+
 const glfw_log = std.log.scoped(.glfw);
 const gl_log = std.log.scoped(.gl);
 const log = std.log;
@@ -334,6 +336,7 @@ pub const ContextOptions = struct {
 pub const Context = struct {
     window: glfw.Window,
     progress_node: std.Progress.Node,
+    options: ContextOptions,
 
     /// Procedure table that will hold loaded OpenGL functions.
     gl_procs: *gl.ProcTable,
@@ -382,7 +385,18 @@ pub const Context = struct {
             .window = window,
             .gl_procs = gl_procs,
             .progress_node = std.Progress.start(.{}),
+            .options = options,
         };
+    }
+
+    pub fn pauseDepthTesting(self: Context) void {
+        _ = self;
+        gl.Disable(gl.DEPTH_TEST);
+    }
+
+    pub fn resumeDepthTesting(self: Context) void {
+        if (self.options.enable_depth_testing)
+            gl.Enable(gl.DEPTH_TEST);
     }
 
     pub fn destroy(self: Context, allocator: std.mem.Allocator) void {
@@ -418,5 +432,107 @@ pub const Ticker = struct {
 
     pub fn deltaMilliSeconds(self: Ticker) f64 {
         return @as(f64, @floatFromInt(self.frame_delta)) / std.time.ns_per_ms;
+    }
+};
+
+pub const FramebufferTextureAttachments = struct {
+    color: bool = false,
+    depth: bool = false,
+    stencil: bool = false,
+};
+
+pub const FramebufferRenderbufferAttachments = struct {
+    depth: bool = false,
+    stencil: bool = false,
+};
+
+pub const Framebuffer = struct {
+    FBO: c_uint,
+    texture_obj: ?texture.Texture,
+    texture_attachments: FramebufferTextureAttachments,
+    renderbuffer_attachments: FramebufferRenderbufferAttachments,
+
+    pub fn initWithTexture(
+        width: u16,
+        height: u16,
+        texture_attachments: FramebufferTextureAttachments,
+        renderbuffer_attachments: FramebufferRenderbufferAttachments,
+    ) !Framebuffer {
+        var fbo = [1]c_uint{undefined};
+        gl.GenFramebuffers(1, &fbo);
+        gl.BindFramebuffer(gl.FRAMEBUFFER, fbo[0]);
+        var texture_obj: texture.Texture = undefined;
+        if (texture_attachments.color) {
+            texture_obj = texture.Texture.init(.color_framebuffer, false);
+            texture_obj.fill(width, height, 3, null);
+            gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture_obj.id, 0);
+        }
+        if (texture_attachments.depth and texture_attachments.stencil) {
+            texture_obj = texture.Texture.init(.depth_stencil_framebuffer, false);
+            texture_obj.fill(width, height, 1, null);
+            gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_STENCIL_ATTACHMENT, gl.TEXTURE_2D, texture_obj.id, 0);
+        } else if (texture_attachments.depth) {
+            texture_obj = texture.Texture.init(.depth_framebuffer, false);
+            texture_obj.fill(width, height, 1, null);
+            gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, texture_obj.id, 0);
+        } else if (texture_attachments.stencil) {
+            texture_obj = texture.Texture.init(.stencil_framebuffer, false);
+            texture_obj.fill(width, height, 1, null);
+            gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl.STENCIL_ATTACHMENT, gl.TEXTURE_2D, texture_obj.id, 0);
+        }
+        if (renderbuffer_attachments.depth and renderbuffer_attachments.stencil) {
+            var rbo: [1]c_uint = undefined;
+            gl.GenRenderbuffers(1, &rbo);
+            gl.BindRenderbuffer(gl.RENDERBUFFER, rbo[0]);
+            gl.RenderbufferStorage(gl.RENDERBUFFER, gl.DEPTH24_STENCIL8, width, height);
+            gl.FramebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_STENCIL_ATTACHMENT, gl.RENDERBUFFER, rbo[0]);
+            gl.BindRenderbuffer(gl.RENDERBUFFER, 0);
+        } else if (renderbuffer_attachments.depth) {
+            var rbo: [1]c_uint = undefined;
+            gl.GenRenderbuffers(1, &rbo);
+            gl.BindRenderbuffer(gl.RENDERBUFFER, rbo[0]);
+            gl.RenderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT24, width, height);
+            gl.FramebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, rbo[0]);
+            gl.BindRenderbuffer(gl.RENDERBUFFER, 0);
+        } else if (renderbuffer_attachments.stencil) {
+            var rbo: [1]c_uint = undefined;
+            gl.GenRenderbuffers(1, &rbo);
+            gl.BindRenderbuffer(gl.RENDERBUFFER, rbo[0]);
+            gl.RenderbufferStorage(gl.RENDERBUFFER, gl.STENCIL_INDEX8, width, height);
+            gl.FramebufferRenderbuffer(gl.FRAMEBUFFER, gl.STENCIL_ATTACHMENT, gl.RENDERBUFFER, rbo[0]);
+            gl.BindRenderbuffer(gl.RENDERBUFFER, 0);
+        }
+        if (gl.CheckFramebufferStatus(gl.FRAMEBUFFER) != gl.FRAMEBUFFER_COMPLETE) {
+            gl_log.err("Couldn't validate the framebuffer completeness.\n", .{});
+            return error.FramebufferIncompleteError;
+        }
+        return .{
+            .FBO = fbo[0],
+            .texture_obj = texture_obj,
+            .texture_attachments = texture_attachments,
+            .renderbuffer_attachments = renderbuffer_attachments,
+        };
+    }
+
+    pub fn bind(self: Framebuffer) void {
+        gl.BindFramebuffer(gl.FRAMEBUFFER, self.FBO);
+    }
+
+    pub fn unbind(self: Framebuffer) void {
+        _ = self;
+        gl.BindFramebuffer(gl.FRAMEBUFFER, 0);
+    }
+
+    pub fn clear(self: Framebuffer) void {
+        if (self.texture_attachments.color) gl.Clear(gl.COLOR_BUFFER_BIT);
+        if (self.texture_attachments.depth or self.renderbuffer_attachments.depth) gl.Clear(gl.DEPTH_BUFFER_BIT);
+        if (self.texture_attachments.stencil or self.renderbuffer_attachments.stencil) gl.Clear(gl.STENCIL_BUFFER_BIT);
+    }
+
+    pub fn deinit(self: Framebuffer) void {
+        var fbo = [1]c_uint{self.FBO};
+        gl.DeleteFramebuffers(1, &fbo);
+        gl.BindRenderbuffer(gl.RENDERBUFFER, 0);
+        gl.BindFramebuffer(gl.FRAMEBUFFER, 0);
     }
 };

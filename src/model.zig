@@ -136,8 +136,9 @@ pub const Mesh = struct {
                 .shininess = 32.0,
             };
             for (self.textures, 0..) |tex, i| {
-                gl.ActiveTexture(gl.TEXTURE0 + @as(c_uint, @intCast(i)));
-                gl.BindTexture(gl.TEXTURE_2D, tex.id);
+                // gl.ActiveTexture(gl.TEXTURE0 + @as(c_uint, @intCast(i)));
+                // gl.BindTexture(gl.TEXTURE_2D, tex.id);
+                tex.bind(@as(c_uint, @intCast(i)));
                 switch (tex.type_) {
                     .diffuse, .base_color => {
                         if (diffuse_nr > 1) {
@@ -167,7 +168,10 @@ pub const Mesh = struct {
         if (world_matrix) |val| {
             model_matrix = val.multiply(self.model_matrix);
         }
-        try shader_program.setMat4f("u_model", model_matrix, true); // Transpose for OpenGL which is column-major!
+        // Transpose for OpenGL which is column-major!
+        shader_program.setMat4f("u_model", model_matrix, true) catch {
+            gl_log.err("Can't set u_model in current shader program!\n", .{});
+        };
         if (global_options.enable_face_culling or self.draw_options.enable_face_culling) {
             gl.Enable(gl.CULL_FACE);
             gl.CullFace(gl.BACK);
@@ -611,6 +615,7 @@ pub const Model = struct {
         options: DrawOptions,
         view_mat: zm.Mat4f,
         proj_mat: zm.Mat4f,
+        camera_translation: zm.Vec3f,
     ) !void {
         // TODO: Refactor the Mesh struct into a SceneNode struct to clean up operations
         // such as highlighting. Basically implement a scene tree with operations on it
@@ -636,8 +641,14 @@ pub const Model = struct {
                 gl.StencilFunc(gl.ALWAYS, 1, 0xFF); // Always pass and write  1
                 gl.StencilMask(0xFF); // Enable writing
             }
+            // TODO: Move these out of the draw method. Since these are userspace, they
+            // hsouldn't be here. And also, it's pointless to write to the GPU for every
+            // damn draw call!
             try shader_program.setBool("u_has_diffuse_texture", false);
             try shader_program.setBool("u_has_specular_texture", false);
+            try shader_program.setMat4f("u_view", view_mat, true);
+            try shader_program.setMat4f("u_proj", proj_mat, true);
+            try shader_program.setVec3f("u_cam_pos", camera_translation);
             try mesh.draw(shader_program, options, self._world_matrix);
 
             if (mesh.draw_options.highlight) {
@@ -706,7 +717,7 @@ pub const Model = struct {
 };
 
 pub const Primitive = struct {
-    pub fn make_cube_mesh() Mesh {
+    pub fn makeCubeMesh() Mesh {
         const vertices: []const Vertex = &.{
             // Back face
             .{ .position = [3]gl.float{ -0.5, -0.5, -0.5 }, .texture_coords = [2]gl.float{ 0.0, 0.0 }, .normal = undefined }, // Bottom-left
@@ -758,6 +769,23 @@ pub const Primitive = struct {
             18, 19, 20, 21, 22, 23,
             24, 25, 26, 27, 28, 29,
             30, 31, 32, 33, 34, 35,
+        };
+        return Mesh.init(@constCast(indices), @constCast(vertices), &.{});
+    }
+
+    pub fn makePlaneMesh() Mesh {
+        const vertices: []const Vertex = &.{
+            // positions   // texCoords
+            .{ .position = [3]gl.float{ -1.0, 1.0, 0.0 }, .texture_coords = [2]gl.float{ 0.0, 1.0 }, .normal = undefined },
+            .{ .position = [3]gl.float{ -1.0, -1.0, 0.0 }, .texture_coords = [2]gl.float{ 0.0, 0.0 }, .normal = undefined },
+            .{ .position = [3]gl.float{ 1.0, -1.0, 0.0 }, .texture_coords = [2]gl.float{ 1.0, 0.0 }, .normal = undefined },
+
+            .{ .position = [3]gl.float{ -1.0, 1.0, 0.0 }, .texture_coords = [2]gl.float{ 0.0, 1.0 }, .normal = undefined },
+            .{ .position = [3]gl.float{ 1.0, -1.0, 0.0 }, .texture_coords = [2]gl.float{ 1.0, 0.0 }, .normal = undefined },
+            .{ .position = [3]gl.float{ 1.0, 1.0, 0.0 }, .texture_coords = [2]gl.float{ 1.0, 1.0 }, .normal = undefined },
+        };
+        const indices: []const gl.uint = &.{
+            0, 1, 2, 3, 4, 5,
         };
         return Mesh.init(@constCast(indices), @constCast(vertices), &.{});
     }
