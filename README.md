@@ -17,6 +17,7 @@ So far, not very much. But I have big plans for Gunter:
 - [x] Multiple light sources
 - [x] Blending, face culling, mesh transformations
 - [x] Skybox
+- [x] Framebuffer objects
 - [ ] Environment maps
 - [ ] Geometry shaders
 - [ ] Instancing
