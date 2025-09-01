@@ -234,9 +234,6 @@ pub fn main() !void {
             gl.PolygonMode(gl.FRONT_AND_BACK, gl.FILL);
         }
 
-        if (input_handler.scene == .skybox) {
-            try skybox.draw(camera.getSkyboxViewMat(), camera.projection_mat);
-        }
         multilight_textured_shader_program.use();
         active_shader_program = multilight_textured_shader_program;
 
@@ -299,6 +296,14 @@ pub fn main() !void {
             .highlight_shader = &highlight_shader_program,
             .enable_face_culling = false,
         }, camera.getViewMat(), camera.projection_mat, camera.translation);
+
+        if (input_handler.scene == .skybox) {
+            // Draw the skybox after all objects for slight performance gains.
+            // FIXME: Blending doesn't work well when the skybox is rendered last! But
+            // this is probably the exact same issue as with other objects drawn on top
+            // of alpha-blended objects. We just need to fix this with sorting.
+            try skybox.draw(camera.getSkyboxViewMat(), camera.projection_mat);
+        }
 
         // Draw the texture from the framebuffer:
         frame_buffer_shader_program.use();
