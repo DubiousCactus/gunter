@@ -107,6 +107,12 @@ pub fn main() !void {
         "shaders/fragment_shader_framebuffer.glsl",
     );
     defer frame_buffer_shader_program.delete();
+    const env_map_shader_program: core.ShaderProgram = try core.ShaderProgram.init(
+        allocator,
+        "shaders/vertex_shader_light_textured.glsl",
+        "shaders/fragment_shader_envmap.glsl",
+    );
+    defer env_map_shader_program.delete();
     // ===================================================================================
     // ============================ VBOS, VAOs, and VEOs =================================
     // var my_model = try model.Model.init(
@@ -289,9 +295,18 @@ pub fn main() !void {
             .highlight_shader = &highlight_shader_program,
             .enable_face_culling = false,
         }, camera.getViewMat(), camera.projection_mat, camera.translation);
-        try suzanne.draw(active_shader_program, .{
-            .highlight = true,
-            .highlight_shader = &highlight_shader_program,
+
+        env_map_shader_program.use();
+        skybox.texture_obj.bind(0);
+        try env_map_shader_program.setInt("u_skybox", 0);
+        try env_map_shader_program.setFloat("u_refractive_index", 2.42);
+        try env_map_shader_program.setFloat("u_refraction_pct", 0.9);
+        // TODO: With entity compoenents, I could have a refractive and a reflective
+        // components that would store the shader! They would also set the uniforms in
+        // the draw method, and I could give them specific parameters! That would solve
+        // a lot of my current problems with the draw options.
+        try suzanne.draw(env_map_shader_program, .{
+            .highlight = false,
             .enable_face_culling = true,
             .use_textures = false,
         }, camera.getViewMat(), camera.projection_mat, camera.translation);

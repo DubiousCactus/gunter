@@ -686,8 +686,12 @@ pub const MultiAsset = struct {
             // TODO: Move these out of the draw method. Since these are userspace, they
             // hsouldn't be here. And also, it's pointless to write to the GPU for every
             // damn draw call!
-            try shader_program.setBool("u_has_diffuse_texture", false);
-            try shader_program.setBool("u_has_specular_texture", false);
+            shader_program.setBool("u_has_diffuse_texture", false) catch |err| {
+                gl_log.err("setBool(): {}\n", .{err});
+            };
+            shader_program.setBool("u_has_specular_texture", false) catch |err| {
+                gl_log.err("setBool(): {}\n", .{err});
+            };
             try shader_program.setMat4f("u_view", view_mat, true);
             try shader_program.setMat4f("u_proj", proj_mat, true);
             try shader_program.setVec3f("u_cam_pos", camera_translation);

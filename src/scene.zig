@@ -231,7 +231,7 @@ pub const SkyBox = struct {
             );
         }
         skybox_shader_program.use();
-        try skybox_shader_program.setInt("cubemap", 0); // Set the uniform to the texture unit
+        try skybox_shader_program.setInt("cubemap", 0); // Set the uniform to the texture unit/slot
         return .{
             .shader_program = skybox_shader_program,
             .skybox_cube_verts = &skybox_cube_verts,
@@ -242,6 +242,7 @@ pub const SkyBox = struct {
     }
 
     pub fn draw(self: SkyBox, camera_view_mat: zm.Mat4f, projection_mat: zm.Mat4f) !void {
+        // WARN: I never call self.texture_obj.bind(); how does this even work???
         gl.DepthFunc(gl.LEQUAL); // Change depth function so depth test passes when values are equal to depth buffer's content
         // gl.DepthMask(gl.FALSE); // Disable depth writing so we don't need to worry about
         // the scale of the skybox!
