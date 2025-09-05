@@ -11,7 +11,7 @@ const log = std.log;
 
 const core = @import("core.zig");
 const scene = @import("scene.zig");
-const model = @import("model.zig");
+const asset = @import("asset.zig");
 const input = @import("input.zig");
 const texture = @import("texture.zig");
 
@@ -114,7 +114,7 @@ pub fn main() !void {
     //     allocator,
     //     .load_entire_scene,
     // );
-    var backpack = try model.Model.init(
+    var backpack = try asset.MultiAsset.initFromPath(
         "/Users/cactus/Code/gunter/assets/guitar-backpack/scene.gltf",
         allocator,
         &context,
@@ -124,26 +124,19 @@ pub fn main() !void {
     backpack.scale(0.01);
     backpack.translate(zm.Vec3f{ 0, 2.5, 4 });
     defer backpack.deinit(allocator);
-    var my_scene = try model.Model.init(
+    var my_scene = try asset.MultiAsset.initFromPath(
         "/Users/cactus/Code/gunter/assets/blender/test_scene.gltf",
         allocator,
         &context,
         .load_entire_scene,
         "blender_scene",
     );
-    if (my_scene.findByName("Suzanne")) |mesh| {
-        mesh.setDrawOptions(.{
-            .enable_face_culling = true,
-            .use_textures = false,
-            .highlight = false,
-            .highlight_shader = &highlight_shader_program,
-        });
-        mesh.translate(zm.Vec3f{ 3, 2, -5 });
-        mesh.scale(2);
-    } else |err| {
-        std.debug.print("Couldn't find Suzanne mesh in the scene!\n", .{});
+    var suzanne = my_scene.extract("Suzanne", false, allocator) catch |err| {
+        std.debug.print("Couldn't extract Suzanne mesh from the scene: {any}\n", .{err});
         return err;
-    }
+    };
+    suzanne.translate(zm.Vec3f{ 3, 2, -5 });
+    suzanne.scale(2);
     if (my_scene.findByName("Cube")) |mesh| {
         mesh.setDrawOptions(.{ .enable_face_culling = true });
     } else |err| {
@@ -178,7 +171,7 @@ pub fn main() !void {
     //     .load_root_mesh_only,
     // );
     // my_model.scale(1);
-    std.debug.print("Model loaded! Drawing...\n", .{});
+    std.debug.print("Assets loaded! Drawing...\n", .{});
 
     const point_lights = [_]zm.Vec3f{
         zm.Vec3f{ 0.7, 0.2, 2.0 },
@@ -188,7 +181,7 @@ pub fn main() !void {
     };
     std.debug.print("Done!\n", .{});
 
-    var cube_mesh: model.Mesh = model.Primitive.makeCubeMesh();
+    var cube_mesh: asset.Mesh = asset.Primitive.makeCubeMesh();
     errdefer cube_mesh.deinit(allocator);
     defer cube_mesh.deinit(allocator);
 
@@ -206,7 +199,7 @@ pub fn main() !void {
     );
     errdefer frame_buffer.deinit();
     defer frame_buffer.deinit();
-    var plane: model.Mesh = model.Primitive.makePlaneMesh();
+    var plane: asset.Mesh = asset.Primitive.makePlaneMesh();
     plane.setDrawOptions(.{ .use_textures = false, .enable_face_culling = false });
     plane.scale(0.25);
     plane.translate(zm.Vec3f{ 0.75, -0.75, 0 });
@@ -295,6 +288,12 @@ pub fn main() !void {
             .highlight = false,
             .highlight_shader = &highlight_shader_program,
             .enable_face_culling = false,
+        }, camera.getViewMat(), camera.projection_mat, camera.translation);
+        try suzanne.draw(active_shader_program, .{
+            .highlight = true,
+            .highlight_shader = &highlight_shader_program,
+            .enable_face_culling = true,
+            .use_textures = false,
         }, camera.getViewMat(), camera.projection_mat, camera.translation);
 
         if (input_handler.scene == .skybox) {

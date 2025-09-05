@@ -217,12 +217,12 @@ pub const Mesh = struct {
     }
 };
 
-pub const Model = struct {
+pub const MultiAsset = struct {
     meshes: std.ArrayList(Mesh),
-    path: []const u8,
-    directory: []const u8,
-    loaded_textures: std.StringHashMap(texture.Texture),
-    root_progress_node: *std.Progress.Node,
+    path: ?[]const u8,
+    directory: ?[]const u8,
+    loaded_textures: ?std.StringHashMap(texture.Texture),
+    root_progress_node: ?*std.Progress.Node,
     root_name: []const u8,
 
     _world_matrix: zm.Mat4f = zm.Mat4f.identity(),
@@ -232,6 +232,7 @@ pub const Model = struct {
 
     pub const Error = error{
         NotImplementedError,
+        AssetNotFound,
     };
 
     pub const LoadingMode = enum {
@@ -239,13 +240,13 @@ pub const Model = struct {
         load_root_mesh_only,
     };
 
-    pub fn init(
+    pub fn initFromPath(
         path: [:0]const u8,
         allocator: std.mem.Allocator,
         context: *core.Context,
         mode: LoadingMode,
         root_name: []const u8,
-    ) !Model {
+    ) !MultiAsset {
         std.debug.print("Loading asset: '{s}'...\n", .{path});
         zmesh.init(allocator);
         defer zmesh.deinit();
@@ -259,7 +260,7 @@ pub const Model = struct {
             log.err("failed to find the directory for {s}", .{path});
         }
 
-        var model = Model{
+        var multi_asset = MultiAsset{
             .meshes = std.ArrayList(Mesh).init(allocator),
             .directory = std.mem.sliceTo(directory, 0),
             .path = path,
@@ -269,18 +270,40 @@ pub const Model = struct {
         };
         switch (mode) {
             .load_entire_scene => {
-                try model.load_entire_scene(data, allocator);
+                try multi_asset.loadEntireScene(data, allocator);
             },
             .load_root_mesh_only => {
-                try model.load_root_mesh(data, allocator);
+                try multi_asset.loadRootMesh(data, allocator);
             },
         }
-        return model;
+        // The loaded textures are no longer needed, they were all copied to the
+        // GPU! We do not want to deinit the values though, because they are the texture
+        // objects used by the meshes!
+        multi_asset.loaded_textures.?.clearAndFree();
+        multi_asset.loaded_textures.?.deinit();
+        return multi_asset;
     }
 
-    fn load_entire_scene(self: *Model, data: *zmesh.io.zcgltf.Data, allocator: std.mem.Allocator) !void {
+    pub fn initFromMesh(
+        mesh: Mesh,
+        allocator: std.mem.Allocator,
+        root_name: []const u8,
+    ) !MultiAsset {
+        var multi_asset = MultiAsset{
+            .meshes = std.ArrayList(Mesh).init(allocator),
+            .directory = undefined,
+            .path = undefined,
+            .loaded_textures = undefined,
+            .root_progress_node = undefined,
+            .root_name = root_name,
+        };
+        try multi_asset.meshes.append(mesh);
+        return multi_asset;
+    }
+
+    fn loadEntireScene(self: *MultiAsset, data: *zmesh.io.zcgltf.Data, allocator: std.mem.Allocator) !void {
         std.debug.print("\t[*]Parsing the scene...\n", .{});
-        var scene_progress = self.root_progress_node.start("Parsing the scene", 0);
+        var scene_progress = self.root_progress_node.?.start("Parsing the scene", 0);
         defer scene_progress.end();
         if (data.scene) |main_scene| {
             std.debug.print("Scene has {d} nodes\n", .{main_scene.nodes_count});
@@ -289,16 +312,16 @@ pub const Model = struct {
                 defer nodes_progress.end();
                 for (nodes[0..main_scene.nodes_count]) |node| {
                     const root_node: *zmesh.io.zcgltf.Node = node;
-                    try self.load_node(root_node, allocator, nodes_progress);
+                    try self.loadNode(root_node, allocator, nodes_progress);
                 }
             }
         } else {
-            log.err("failed to find a main scene for gltf file: {s}", .{self.path});
+            log.err("failed to find a main scene for gltf file: {s}", .{self.path.?});
             return error.NoMainSceneFound;
         }
     }
 
-    fn load_root_mesh(self: *Model, data: *zmesh.io.zcgltf.Data, allocator: std.mem.Allocator) !void {
+    fn loadRootMesh(self: *MultiAsset, data: *zmesh.io.zcgltf.Data, allocator: std.mem.Allocator) !void {
         var mesh_indices = std.ArrayList(u32).init(allocator);
         var mesh_positions = std.ArrayList([3]f32).init(allocator);
         var mesh_normals = std.ArrayList([3]f32).init(allocator);
@@ -324,14 +347,14 @@ pub const Model = struct {
         // ));
     }
 
-    fn load_node(
-        self: *Model,
+    fn loadNode(
+        self: *MultiAsset,
         node: *zmesh.io.zcgltf.Node,
         allocator: std.mem.Allocator,
         progress_node: std.Progress.Node,
     ) !void {
         if (node.mesh) |mesh| {
-            var processed_mesh = try self.process_mesh(
+            var processed_mesh = try self.processMesh(
                 mesh,
                 allocator,
                 progress_node,
@@ -348,13 +371,13 @@ pub const Model = struct {
             std.debug.print("Node has {d} children\n", .{node.children_count});
             progress_node.increaseEstimatedTotalItems(node.children_count);
             for (0..node.children_count) |i| {
-                try self.load_node(children[i], allocator, progress_node);
+                try self.loadNode(children[i], allocator, progress_node);
             }
         }
     }
 
-    fn process_mesh(
-        self: *Model,
+    fn processMesh(
+        self: *MultiAsset,
         mesh: *zmesh.io.zcgltf.Mesh,
         allocator: std.mem.Allocator,
         progress_node: std.Progress.Node,
@@ -409,7 +432,7 @@ pub const Model = struct {
                 // for (0..num_vertices) {
                 //     attr.data.unpackFloat();
                 // }
-                return Model.Error.NotImplementedError;
+                return MultiAsset.Error.NotImplementedError;
             }
             const attribute_types = primitive.attributes[0..primitive.attributes_count];
             var vertex: Vertex = Vertex{
@@ -469,7 +492,7 @@ pub const Model = struct {
                     // familiar diffuse and specular maps! Hooray
                     std.debug.print("Material is PBRspecularGlossiness\n", .{});
                     if (material.pbr_specular_glossiness.diffuse_texture.texture) |tex| {
-                        try textures.append(try self.load_texture(tex, .diffuse, allocator));
+                        try textures.append(try self.loadTexture(tex, .diffuse, allocator));
                         std.debug.print("Material diffuse color is a texture\n", .{});
                     } else {
                         std.debug.print("material diffuse color is a factor\n", .{});
@@ -477,7 +500,7 @@ pub const Model = struct {
                         // TODO: Load and store!
                     }
                     if (material.pbr_specular_glossiness.specular_glossiness_texture.texture) |tex| {
-                        try textures.append(try self.load_texture(tex, .specular, allocator));
+                        try textures.append(try self.loadTexture(tex, .specular, allocator));
                         std.debug.print("Material specular-glossiness is a texture\n", .{});
                     } else {
                         std.debug.print("material specular-glossiness are factors\n", .{});
@@ -491,7 +514,7 @@ pub const Model = struct {
                     // 0.0 and 1.0, or b) a texture.
                     std.debug.print("Material is PBRmetallicRoughness\n", .{});
                     if (material.pbr_metallic_roughness.base_color_texture.texture) |tex| {
-                        try textures.append(try self.load_texture(tex, .base_color, allocator));
+                        try textures.append(try self.loadTexture(tex, .base_color, allocator));
                         std.debug.print("Material base color is a texture\n", .{});
                     } else {
                         std.debug.print("material base color is a factor\n", .{});
@@ -499,7 +522,7 @@ pub const Model = struct {
                         // TODO: Load and store!
                     }
                     if (material.pbr_metallic_roughness.metallic_roughness_texture.texture) |tex| {
-                        try textures.append(try self.load_texture(tex, .metalic_roughness, allocator));
+                        try textures.append(try self.loadTexture(tex, .metalic_roughness, allocator));
                         std.debug.print("Material metalic roughness is a texture\n", .{});
                     } else {
                         std.debug.print("material metallic rougness are factors\n", .{});
@@ -520,8 +543,8 @@ pub const Model = struct {
         );
     }
 
-    fn load_texture(
-        self: *Model,
+    fn loadTexture(
+        self: *MultiAsset,
         gltf_texture: *zmesh.io.zcgltf.Texture,
         texture_type: texture.TextureType,
         allocator: std.mem.Allocator,
@@ -535,15 +558,15 @@ pub const Model = struct {
         var texture_obj: texture.Texture = undefined;
         errdefer texture_obj.deinit();
         if (gltf_texture.image.?.uri) |image_uri| {
-            if (self.loaded_textures.get(std.mem.sliceTo(image_uri, 0))) |cached_texture| {
+            if (self.loaded_textures.?.get(std.mem.sliceTo(image_uri, 0))) |cached_texture| {
                 texture_obj = cached_texture;
                 std.debug.print("Using cache for '{s}\n", .{image_uri});
             } else {
                 texture_obj = texture.Texture.init(texture_type, true);
 
                 std.debug.print("Loading texture from uri: {s}\n", .{image_uri});
-                const dir = std.fs.cwd().openDir(self.directory, .{}) catch |err| {
-                    log.err("failed to open directory: {?s}", .{self.directory});
+                const dir = std.fs.cwd().openDir(self.directory.?, .{}) catch |err| {
+                    log.err("failed to open directory: {?s}", .{self.directory.?});
                     return err;
                 };
                 const file = dir.openFile(std.mem.sliceTo(image_uri, 0), .{}) catch |err| {
@@ -556,7 +579,7 @@ pub const Model = struct {
                     allocator,
                 );
 
-                try self.loaded_textures.put(std.mem.sliceTo(image_uri, 0), texture_obj);
+                try self.loaded_textures.?.put(std.mem.sliceTo(image_uri, 0), texture_obj);
             }
         } else if (gltf_texture.image.?.buffer_view) |buffer_view| {
             std.debug.print("Loading texture from buffer view\n", .{});
@@ -585,32 +608,51 @@ pub const Model = struct {
         return texture_obj;
     }
 
-    pub fn scale(self: *Model, scalar: f32) void {
+    pub fn scale(self: *MultiAsset, scalar: f32) void {
         self.scaling = zm.Mat4f.scaling(scalar, scalar, scalar).multiply(self.scaling);
         self._world_matrix = self.rotation.multiply(self.translation.multiply(self.scaling));
     }
 
-    pub fn translate(self: *Model, t: zm.Vec3f) void {
+    pub fn translate(self: *MultiAsset, t: zm.Vec3f) void {
         self.translation = zm.Mat4f.translationVec3(t).multiply(self.translation);
         self._world_matrix = self.rotation.multiply(self.translation.multiply(self.scaling));
     }
 
-    pub fn rotate(self: *Model, quaternion: zm.Quaternionf) void {
+    pub fn rotate(self: *MultiAsset, quaternion: zm.Quaternionf) void {
         self.rotation = zm.Mat4f.fromQuaternion(quaternion).multiply(self.rotation);
         self._world_matrix = self.rotation.multiply(self.translation.multiply(self.scaling));
     }
 
-    pub fn findByName(self: Model, name: []const u8) !*Mesh {
+    pub fn findByName(self: MultiAsset, name: []const u8) !*Mesh {
         for (self.meshes.items) |*mesh| {
             if (std.mem.eql(u8, mesh.name, name)) {
                 return mesh;
             }
         }
-        return error.MeshNotFound;
+        return MultiAsset.Error.AssetNotFound;
+    }
+
+    pub fn extract(
+        self: *MultiAsset,
+        name: []const u8,
+        with_world_mat: bool,
+        allocator: std.mem.Allocator,
+    ) !MultiAsset {
+        for (self.meshes.items, 0..) |mesh, i| {
+            if (std.mem.eql(u8, mesh.name, name)) {
+                // WARN: This breaks the order of the list. For now we don't need to
+                // maintain the order so it's fine, because this is O(1).
+                var found_mesh: Mesh = self.meshes.swapRemove(i);
+                if (with_world_mat)
+                    found_mesh.model_matrix = self._world_matrix.multiply(found_mesh.model_matrix);
+                return try MultiAsset.initFromMesh(found_mesh, allocator, name);
+            }
+        }
+        return MultiAsset.Error.AssetNotFound;
     }
 
     pub fn draw(
-        self: *Model,
+        self: *MultiAsset,
         shader_program: core.ShaderProgram,
         options: DrawOptions,
         view_mat: zm.Mat4f,
@@ -707,12 +749,14 @@ pub const Model = struct {
         }
     }
 
-    pub fn deinit(self: *Model, allocator: std.mem.Allocator) void {
+    pub fn deinit(self: *MultiAsset, allocator: std.mem.Allocator) void {
         for (self.meshes.items) |mesh| {
             mesh.deinit(allocator);
         }
         self.meshes.deinit();
-        self.loaded_textures.deinit();
+        if (self.loaded_textures) |*textures| {
+            textures.deinit();
+        }
     }
 };
 
