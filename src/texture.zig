@@ -178,10 +178,10 @@ pub const Texture = struct {
         defer image.deinit();
         var pixel_data_ptr = image.rawBytes().ptr;
         if (flip_vertically) {
-            var img = zignal.Image(zigimg.color.Rgb24).init(
+            var img = zignal.Image(zigimg.color.Rgba32).init(
                 image.width,
                 image.height,
-                @constCast(image.pixels.rgb24),
+                @constCast(image.pixels.rgba32),
             );
             img.flipTopBottom();
             pixel_data_ptr = img.asBytes().ptr;

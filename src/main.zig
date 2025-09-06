@@ -14,6 +14,7 @@ const scene = @import("scene.zig");
 const asset = @import("asset.zig");
 const input = @import("input.zig");
 const texture = @import("texture.zig");
+const ecs = @import("ecs.zig");
 
 const screen_w = 1920;
 const screen_h = 1080;
@@ -33,6 +34,7 @@ pub fn main() !void {
         .grab_mouse = true,
     });
     defer context.destroy(allocator);
+    try context.splashScreen();
     var ticker = try core.Ticker.init();
     var camera = scene.Camera.init(
         &ticker,
@@ -45,6 +47,9 @@ pub fn main() !void {
     );
     var input_handler = input.InputHandler.init(&camera);
 
+    // TODO: Abstract this away into the context initialization. We want to have
+    // user-space functions, where the user can choose to hook the cursor callback to
+    // the camera for example.
     context.window.setUserPointer(&input_handler);
     context.window.setCursorPosCallback(struct {
         fn anonymous_callback(window: glfw.Window, x: f64, y: f64) void {
@@ -177,7 +182,6 @@ pub fn main() !void {
     //     .load_root_mesh_only,
     // );
     // my_model.scale(1);
-    std.debug.print("Assets loaded! Drawing...\n", .{});
 
     const point_lights = [_]zm.Vec3f{
         zm.Vec3f{ 0.7, 0.2, 2.0 },
@@ -185,7 +189,6 @@ pub fn main() !void {
         zm.Vec3f{ -4.0, 2.0, -12.0 },
         zm.Vec3f{ 0.0, 0.0, -3.0 },
     };
-    std.debug.print("Done!\n", .{});
 
     var cube_mesh: asset.Mesh = asset.Primitive.makeCubeMesh();
     errdefer cube_mesh.deinit(allocator);
@@ -209,6 +212,8 @@ pub fn main() !void {
     plane.setDrawOptions(.{ .use_textures = false, .enable_face_culling = false });
     plane.scale(0.25);
     plane.translate(zm.Vec3f{ 0.75, -0.75, 0 });
+    std.debug.print("Assets loaded! Drawing...\n", .{});
+    context.ready();
 
     gl.ClearColor(0.0, 0.0, 0.0, 1);
     var active_shader_program: core.ShaderProgram = multilight_textured_shader_program;

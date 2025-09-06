@@ -5,6 +5,7 @@ const zigimg = @import("zigimg");
 const zm = @import("zm");
 
 const texture = @import("texture.zig");
+const asset = @import("asset.zig");
 
 const glfw_log = std.log.scoped(.glfw);
 const gl_log = std.log.scoped(.gl);
@@ -337,6 +338,8 @@ pub const Context = struct {
     window: glfw.Window,
     progress_node: std.Progress.Node,
     options: ContextOptions,
+    splash_texture: texture.Texture,
+    splash_shader_program: ShaderProgram,
 
     /// Procedure table that will hold loaded OpenGL functions.
     gl_procs: *gl.ProcTable,
@@ -349,7 +352,7 @@ pub const Context = struct {
             return error.GLFWInitFailed;
         }
 
-        const window = glfw.Window.create(options.width, options.height, "Gunter", null, null, .{
+        const window = glfw.Window.create(options.width, options.height, "Gunter Engine", null, null, .{
             .context_version_major = gl.info.version_major,
             .context_version_minor = gl.info.version_minor,
             .opengl_profile = .opengl_core_profile,
@@ -374,19 +377,116 @@ pub const Context = struct {
         // Make the procedure table current on the calling thread.
         gl.makeProcTableCurrent(gl_procs);
 
-        if (options.enable_depth_testing) gl.Enable(gl.DEPTH_TEST);
-        if (options.enable_blending) {
-            gl.Enable(gl.BLEND);
-            gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-        }
-        if (options.grab_mouse) window.setInputModeCursor(.disabled);
+        const root_dir = std.fs.cwd().openDir("./", .{}) catch |err| {
+            log.err("failed to open directory ./ ", .{});
+            return err;
+        };
+        const splash_file = root_dir.openFile(std.mem.sliceTo("gunter.png", 0), .{}) catch |err| {
+            log.err("failed to open texture file gunter.png", .{});
+            return err;
+        };
+
+        var splash_texture = texture.Texture.init(.base_color, false);
+        try splash_texture.loadFromFile(splash_file, true, allocator);
+
+        const splash_shader: ShaderProgram = try ShaderProgram.init(
+            allocator,
+            "shaders/vertex_shader_splash.glsl",
+            "shaders/fragment_shader_splash.glsl",
+        );
 
         return Context{
             .window = window,
             .gl_procs = gl_procs,
             .progress_node = std.Progress.start(.{}),
             .options = options,
+            .splash_texture = splash_texture,
+            .splash_shader_program = splash_shader,
         };
+    }
+
+    fn getMonitorWidth(self: Context) ?u32 {
+        _ = self;
+        var monitor_width: ?u32 = undefined;
+        if (glfw.Monitor.getPrimary()) |monitor| {
+            if (monitor.getVideoMode()) |mode| {
+                monitor_width = mode.getWidth();
+            } else {
+                glfw_log.err("Could not get the video mode object\n", .{});
+            }
+        } else {
+            glfw_log.err("Could not find the monitor object\n", .{});
+        }
+        return monitor_width;
+    }
+
+    fn getMonitorHeight(self: Context) ?u32 {
+        _ = self;
+        var monitor_height: ?u32 = undefined;
+        if (glfw.Monitor.getPrimary()) |monitor| {
+            if (monitor.getVideoMode()) |mode| {
+                monitor_height = mode.getHeight();
+            } else {
+                glfw_log.err("Could not get the video mode object\n", .{});
+            }
+        } else {
+            glfw_log.err("Could not find the monitor object\n", .{});
+        }
+        return monitor_height;
+    }
+    pub fn splashScreen(self: Context) !void {
+        const width = 400;
+        const height = 400;
+        const monitor_width: u32 = self.getMonitorWidth() orelse 1920;
+        const monitor_height: u32 = self.getMonitorHeight() orelse 1080;
+        self.window.setPos(.{
+            .x = @as(u32, @intCast(@divFloor(monitor_width, 2) - @divFloor(width, 2))),
+            .y = @as(u32, @intCast(@divFloor(monitor_height, 2) - @divFloor(height, 2))),
+        });
+        self.window.setAttrib(.decorated, false);
+        self.window.setAttrib(.floating, true);
+        self.window.setAttrib(.resizable, false);
+        self.window.setAttrib(.auto_iconify, true);
+
+        self.splash_shader_program.use();
+        var quad = asset.Primitive.makePlaneMesh();
+        self.splash_texture.bind(0);
+        try self.splash_shader_program.setInt("u_texture", 0);
+
+        self.window.setSize(.{ .width = 400, .height = 400 });
+        gl.ClearColor(0.0, 0.0, 0.0, 1);
+        try quad.draw(self.splash_shader_program, .{
+            .use_textures = false,
+        }, undefined);
+        self.window.swapBuffers(); // Swap the color buffer used to render at this frame and
+        glfw.pollEvents(); // checks if any events are triggered, updates the window
+        // state and calls the corresponding functions which we can register via
+        // callbacks.
+    }
+
+    pub fn ready(self: Context) void {
+        self.splash_texture.deinit();
+        self.splash_shader_program.delete();
+        // glfw.defaultWindowHints();
+        self.window.setAttrib(.decorated, true);
+        self.window.setAttrib(.floating, false);
+        self.window.setAttrib(.resizable, false);
+
+        const monitor_width: u32 = self.getMonitorWidth() orelse 1920;
+        const monitor_height: u32 = self.getMonitorHeight() orelse 1080;
+        self.window.setPos(.{
+            .x = @as(u32, @intCast(@divFloor(monitor_width, 2) - @divFloor(self.options.width, 2))),
+            .y = @as(u32, @intCast(@divFloor(monitor_height, 2) - @divFloor(self.options.height, 2))),
+        });
+        self.window.setSize(.{ .width = self.options.width, .height = self.options.height });
+        gl.Viewport(0, 0, self.options.width, self.options.height);
+        if (self.options.enable_depth_testing) gl.Enable(gl.DEPTH_TEST);
+        if (self.options.enable_blending) {
+            gl.Enable(gl.BLEND);
+            gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+        }
+        if (self.options.grab_mouse) self.window.setInputModeCursor(.disabled);
+        gl.ActiveTexture(gl.TEXTURE0); // Reset for good measures!
     }
 
     pub fn pauseDepthTesting(self: Context) void {
