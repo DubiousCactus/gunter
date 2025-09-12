@@ -474,10 +474,15 @@ pub const Context = struct {
 
         const monitor_width: u32 = self.getMonitorWidth() orelse 1920;
         const monitor_height: u32 = self.getMonitorHeight() orelse 1080;
-        self.window.setPos(.{
-            .x = @as(u32, @intCast(@divFloor(monitor_width, 2) - @divFloor(self.options.width, 2))),
-            .y = @as(u32, @intCast(@divFloor(monitor_height, 2) - @divFloor(self.options.height, 2))),
-        });
+        var x_offset: u32 = 0;
+        var y_offset: u32 = 0;
+        if (self.options.width < monitor_width) {
+            x_offset = @as(u32, @intCast(@divFloor(monitor_width, 2) - @divFloor(self.options.width, 2)));
+        }
+        if (self.options.height < monitor_height) {
+            y_offset = @as(u32, @intCast(@divFloor(monitor_height, 2) - @divFloor(self.options.height, 2)));
+        }
+        self.window.setPos(.{ .x = x_offset, .y = y_offset });
         self.window.setSize(.{ .width = self.options.width, .height = self.options.height });
         gl.Viewport(0, 0, self.options.width, self.options.height);
         if (self.options.enable_depth_testing) gl.Enable(gl.DEPTH_TEST);
