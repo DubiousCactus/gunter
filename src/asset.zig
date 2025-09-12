@@ -33,6 +33,8 @@ pub const Vertex = extern struct {
     texture_coords: [2]gl.float,
 };
 
+// TODO: There's no point in keeping all this data in RAM. I could instead just copy the
+// vertex data to the buffer as it's being read from the disk, with gl.BuffsetSubData()?
 pub const Mesh = struct {
     indices: []gl.uint,
     vertices: []Vertex,
@@ -454,6 +456,11 @@ pub const MultiAsset = struct {
                         // NOTE: In theory the type should correspond to the data type
                         // (ie vec3, vec2, etc.). But in the Zig wrapper, it matches
                         // both the name and the data type.
+                        // TODO: Here, I could write into the buffer directly by
+                        // replacing vertex.position pointer with a pointer given by
+                        // gl.MapBuffer()! then readFloat() will copy the data directly
+                        // into the buffer, and we won't do any useless intermediate
+                        // data copying with costly arraylists!
                         .position => {
                             _ = attr.data.readFloat(i, &vertex.position);
                         },
