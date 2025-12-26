@@ -3,7 +3,6 @@ const gl = @import("gl");
 const zigimg = @import("zigimg");
 const zm = @import("zm");
 const zmesh = @import("zmesh");
-const zignal = @import("zignal");
 
 const gl_log = std.log.scoped(.gl);
 const log = std.log;
@@ -144,22 +143,17 @@ pub const Texture = struct {
         allocator: std.mem.Allocator,
         target_offset: u8,
     ) !void {
-        var image = try zigimg.Image.fromFile(allocator, @constCast(&file));
-        errdefer image.deinit();
-        defer image.deinit();
-        var pixel_data_ptr = image.rawBytes().ptr;
+        var read_buffer: [zigimg.io.DEFAULT_BUFFER_SIZE]u8 = undefined;
+        var image = try zigimg.Image.fromFile(allocator, file, read_buffer[0..]);
+        errdefer image.deinit(allocator);
+        defer image.deinit(allocator);
         if (flip_vertically) {
-            var img = zignal.Image(zigimg.color.Rgb24).init(
-                image.width,
-                image.height,
-                @constCast(image.pixels.rgb24),
-            );
-            img.flipTopBottom();
-            pixel_data_ptr = img.asBytes().ptr;
+            try image.flipVertically(allocator);
         }
         const channels: u8 = if (image.pixelFormat().isRgba()) 4 else 3;
         self.fillCubeMap(
-            pixel_data_ptr,
+            // pixel_data_ptr,
+            image.rawBytes().ptr,
             @as(c_int, @intCast(image.width)),
             @as(c_int, @intCast(image.height)),
             channels,
@@ -173,25 +167,20 @@ pub const Texture = struct {
         flip_vertically: bool,
         allocator: std.mem.Allocator,
     ) !void {
-        var image = try zigimg.Image.fromFile(allocator, @constCast(&file));
-        errdefer image.deinit();
-        defer image.deinit();
-        var pixel_data_ptr = image.rawBytes().ptr;
+        var read_buffer: [zigimg.io.DEFAULT_BUFFER_SIZE]u8 = undefined;
+        var image = try zigimg.Image.fromFile(allocator, file, read_buffer[0..]);
+        defer image.deinit(allocator);
+
+        errdefer image.deinit(allocator);
         if (flip_vertically) {
-            var img = zignal.Image(zigimg.color.Rgba32).init(
-                image.width,
-                image.height,
-                @constCast(image.pixels.rgba32),
-            );
-            img.flipTopBottom();
-            pixel_data_ptr = img.asBytes().ptr;
+            try image.flipVertically(allocator);
         }
         const channels: u8 = if (image.pixelFormat().isRgba()) 4 else 3;
         self.fill(
             @as(c_int, @intCast(image.width)),
             @as(c_int, @intCast(image.height)),
             channels,
-            pixel_data_ptr,
+            image.rawBytes().ptr,
         );
     }
 

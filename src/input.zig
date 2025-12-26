@@ -1,5 +1,5 @@
 const std = @import("std");
-const glfw = @import("mach-glfw");
+const glfw = @import("zglfw");
 const gl = @import("gl");
 const zigimg = @import("zigimg");
 const zm = @import("zm");
@@ -31,7 +31,7 @@ pub const InputHandler = struct {
 
     pub fn keyCallback(
         self: *InputHandler,
-        window: glfw.Window,
+        window: *glfw.Window,
         key: glfw.Key,
         scancode: i32,
         action: glfw.Action,
@@ -60,7 +60,7 @@ pub const InputHandler = struct {
         // input handler. For this we would need a Map of .{keycode, action} -> comptime fn or something like that.
     }
 
-    pub fn consume(self: *InputHandler, window: glfw.Window) void {
+    pub fn consume(self: *InputHandler, window: *glfw.Window) void {
         if (window.getKey(.w) == .press) {
             self.cam.moveFwd();
         } else if (window.getKey(.s) == .press) {

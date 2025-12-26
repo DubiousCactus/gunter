@@ -1,20 +1,16 @@
 const std = @import("std");
-const glfw = @import("mach-glfw");
+const glfw = @import("zglfw");
 const gl = @import("gl");
-const zigimg = @import("zigimg");
 const zm = @import("zm");
-const zmesh = @import("zmesh");
 
 const glfw_log = std.log.scoped(.glfw);
 const gl_log = std.log.scoped(.gl);
 const log = std.log;
 
-const core = @import("core.zig");
-const scene = @import("scene.zig");
-const asset = @import("asset.zig");
-const input = @import("input.zig");
-const texture = @import("texture.zig");
-const ecs = @import("ecs.zig");
+const gunter_engine = @import("root.zig");
+const scene = gunter_engine.scene;
+const asset = gunter_engine.asset;
+const core = gunter_engine.core;
 
 const screen_w = 1920;
 const screen_h = 1080;
@@ -38,36 +34,36 @@ pub fn main() !void {
     var ticker = try core.Ticker.init();
     var camera = scene.Camera.init(
         &ticker,
-        zm.Vec3f{ 0, 0, -6 },
+        zm.Vec3f{ .data = .{ 0, 0, -6 } },
         45,
         screen_w,
         screen_h,
         0.1,
         100.0,
     );
-    var input_handler = input.InputHandler.init(&camera);
+    var input_handler = gunter_engine.InputHandler.init(&camera);
 
     // TODO: Abstract this away into the context initialization. We want to have
     // user-space functions, where the user can choose to hook the cursor callback to
     // the camera for example.
     context.window.setUserPointer(&input_handler);
-    context.window.setCursorPosCallback(struct {
-        fn anonymous_callback(window: glfw.Window, x: f64, y: f64) void {
-            const user_ptr = window.getUserPointer(input.InputHandler);
+    _ = context.window.setCursorPosCallback(struct {
+        fn anonymous_callback(window: *glfw.Window, x: f64, y: f64) callconv(.c) void {
+            const user_ptr = window.getUserPointer(gunter_engine.InputHandler);
             if (user_ptr != null) {
                 user_ptr.?.mouseCallback(x, y);
             }
         }
     }.anonymous_callback);
-    context.window.setKeyCallback(struct {
+    _ = context.window.setKeyCallback(struct {
         fn anonymous_callback(
-            window: glfw.Window,
+            window: *glfw.Window,
             key: glfw.Key,
             scancode: i32,
             action: glfw.Action,
             mods: glfw.Mods,
-        ) void {
-            const user_ptr = window.getUserPointer(input.InputHandler);
+        ) callconv(.c) void {
+            const user_ptr = window.getUserPointer(gunter_engine.InputHandler);
             if (user_ptr != null) {
                 user_ptr.?.keyCallback(window, key, scancode, action, mods);
             }
@@ -133,7 +129,7 @@ pub fn main() !void {
         "backpack",
     );
     backpack.scale(0.01);
-    backpack.translate(zm.Vec3f{ 0, 2.5, 4 });
+    backpack.translate(zm.Vec3f{ .data = .{ 0, 2.5, 4 } });
     defer backpack.deinit(allocator);
     var my_scene = try asset.MultiAsset.initFromPath(
         "/Users/cactus/Code/gunter/assets/blender/test_scene.gltf",
@@ -146,7 +142,7 @@ pub fn main() !void {
         std.debug.print("Couldn't extract Suzanne mesh from the scene: {any}\n", .{err});
         return err;
     };
-    suzanne.translate(zm.Vec3f{ 3, 2, -5 });
+    suzanne.translate(zm.Vec3f{ .data = .{ 3, 2, -5 } });
     suzanne.scale(2);
     if (my_scene.findByName("Cube")) |mesh| {
         mesh.setDrawOptions(.{ .enable_face_culling = true });
@@ -184,10 +180,10 @@ pub fn main() !void {
     // my_model.scale(1);
 
     const point_lights = [_]zm.Vec3f{
-        zm.Vec3f{ 0.7, 0.2, 2.0 },
-        zm.Vec3f{ 2.3, -3.3, -4.0 },
-        zm.Vec3f{ -4.0, 2.0, -12.0 },
-        zm.Vec3f{ 0.0, 0.0, -3.0 },
+        zm.Vec3f{ .data = .{ 0.7, 0.2, 2.0 } },
+        zm.Vec3f{ .data = .{ 2.3, -3.3, -4.0 } },
+        zm.Vec3f{ .data = .{ -4.0, 2.0, -12.0 } },
+        zm.Vec3f{ .data = .{ 0.0, 0.0, -3.0 } },
     };
 
     var cube_mesh: asset.Mesh = asset.Primitive.makeCubeMesh();
@@ -211,9 +207,9 @@ pub fn main() !void {
     var plane: asset.Mesh = asset.Primitive.makePlaneMesh();
     plane.setDrawOptions(.{ .use_textures = false, .enable_face_culling = false });
     plane.scale(0.25);
-    plane.translate(zm.Vec3f{ 0.75, -0.75, 0 });
+    plane.translate(zm.Vec3f{ .data = .{ 0.75, -0.75, 0 } });
     std.debug.print("Assets loaded! Drawing...\n", .{});
-    context.ready();
+    try context.ready();
 
     gl.ClearColor(0.0, 0.0, 0.0, 1);
     var active_shader_program: core.ShaderProgram = multilight_textured_shader_program;
@@ -248,9 +244,9 @@ pub fn main() !void {
         for (point_lights, 0..) |light_pos, i| {
             try active_shader_program.setPointLight(@as(u8, @intCast(i)), .{
                 .position = light_pos,
-                .ambient = zm.Vec3f{ 0.1, 0.1, 0.1 },
-                .diffuse = zm.Vec3f{ 0.3, 0.3, 0.3 },
-                .specular = zm.Vec3f{ 1.0, 1.0, 1.0 },
+                .ambient = zm.Vec3f{ .data = .{ 0.1, 0.1, 0.1 } },
+                .diffuse = zm.Vec3f{ .data = .{ 0.3, 0.3, 0.3 } },
+                .specular = zm.Vec3f{ .data = .{ 1.0, 1.0, 1.0 } },
                 .constant = 1.0,
                 .linear = 0.09,
                 .quadratic = 0.032,
@@ -275,18 +271,18 @@ pub fn main() !void {
             .direction = camera.front,
             .inner_cutoff_angle_cosine = @cos(std.math.degreesToRadians(15)),
             .outer_cutoff_angle_cosine = @cos(std.math.degreesToRadians(25)),
-            .ambient = zm.Vec3f{ 0.1, 0.1, 0.1 },
-            .diffuse = zm.Vec3f{ 1.0, 1.0, 1.0 },
-            .specular = zm.Vec3f{ 1.0, 1.0, 1.0 },
+            .ambient = zm.Vec3f{ .data = .{ 0.1, 0.1, 0.1 } },
+            .diffuse = zm.Vec3f{ .data = .{ 1.0, 1.0, 1.0 } },
+            .specular = zm.Vec3f{ .data = .{ 1.0, 1.0, 1.0 } },
             .constant = 1.0,
             .linear = 0.027,
             .quadratic = 0.0028,
         });
         try active_shader_program.setDirectionalLight(.{
-            .direction = zm.Vec3f{ -0.2, -6.0, -2.3 },
-            .ambient = zm.Vec3f{ 0.1, 0.1, 0.1 },
-            .diffuse = zm.Vec3f{ 0.2, 0.2, 0.2 },
-            .specular = zm.Vec3f{ 1.0, 1.0, 1.0 },
+            .direction = zm.Vec3f{ .data = .{ -0.2, -6.0, -2.3 } },
+            .ambient = zm.Vec3f{ .data = .{ 0.1, 0.1, 0.1 } },
+            .diffuse = zm.Vec3f{ .data = .{ 0.2, 0.2, 0.2 } },
+            .specular = zm.Vec3f{ .data = .{ 1.0, 1.0, 1.0 } },
         });
 
         try active_shader_program.setBool("u_is_source", false);

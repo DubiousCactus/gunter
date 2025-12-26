@@ -20,10 +20,10 @@ pub const DrawOptions = struct {
 
 pub fn mat4f_from_array(arr: [16]f32) zm.Mat4f {
     return zm.Mat4f{ .data = .{
-        arr[0],  arr[1],  arr[2],  arr[3],
-        arr[4],  arr[5],  arr[6],  arr[7],
-        arr[8],  arr[9],  arr[10], arr[11],
-        arr[12], arr[13], arr[14], arr[15],
+        .{ arr[0], arr[1], arr[2], arr[3] },
+        .{ arr[4], arr[5], arr[6], arr[7] },
+        .{ arr[8], arr[9], arr[10], arr[11] },
+        .{ arr[12], arr[13], arr[14], arr[15] },
     } };
 }
 
@@ -263,7 +263,7 @@ pub const MultiAsset = struct {
         }
 
         var multi_asset = MultiAsset{
-            .meshes = std.ArrayList(Mesh).init(allocator),
+            .meshes = std.ArrayList(Mesh).empty,
             .directory = std.mem.sliceTo(directory, 0),
             .path = path,
             .loaded_textures = std.StringHashMap(texture.Texture).init(allocator),
@@ -292,14 +292,14 @@ pub const MultiAsset = struct {
         root_name: []const u8,
     ) !MultiAsset {
         var multi_asset = MultiAsset{
-            .meshes = std.ArrayList(Mesh).init(allocator),
+            .meshes = std.ArrayList(Mesh).empty,
             .directory = undefined,
             .path = undefined,
             .loaded_textures = undefined,
             .root_progress_node = undefined,
             .root_name = root_name,
         };
-        try multi_asset.meshes.append(mesh);
+        try multi_asset.meshes.append(allocator, mesh);
         return multi_asset;
     }
 
@@ -324,11 +324,12 @@ pub const MultiAsset = struct {
     }
 
     fn loadRootMesh(self: *MultiAsset, data: *zmesh.io.zcgltf.Data, allocator: std.mem.Allocator) !void {
-        var mesh_indices = std.ArrayList(u32).init(allocator);
-        var mesh_positions = std.ArrayList([3]f32).init(allocator);
-        var mesh_normals = std.ArrayList([3]f32).init(allocator);
+        var mesh_indices = std.ArrayList(u32).empty;
+        var mesh_positions = std.ArrayList([3]f32).empty;
+        var mesh_normals = std.ArrayList([3]f32).empty;
 
         try zmesh.io.zcgltf.appendMeshPrimitive(
+            allocator,
             data,
             0, // mesh index
             0, // gltf primitive index (submesh index)
@@ -366,7 +367,7 @@ pub const MultiAsset = struct {
             processed_mesh.name = try allocator.allocSentinel(u8, node_name.len, 0);
             std.mem.copyForwards(u8, @constCast(processed_mesh.name), node_name);
             std.debug.print("Loaded mesh '{s}'\n", .{processed_mesh.name});
-            try self.meshes.append(processed_mesh);
+            try self.meshes.append(allocator, processed_mesh);
             progress_node.setCompletedItems(self.meshes.items.len);
         }
         if (node.children) |children| {
@@ -392,9 +393,9 @@ pub const MultiAsset = struct {
         // flag to select a strategy.
         // TODO: Load textures and materials
         // TODO: Load model matrices, etc.
-        var vertices = std.ArrayList(Vertex).init(allocator);
-        var indices = std.ArrayList(gl.uint).init(allocator);
-        var textures = std.ArrayList(texture.Texture).init(allocator);
+        var vertices = std.ArrayList(Vertex).empty;
+        var indices = std.ArrayList(gl.uint).empty;
+        var textures = std.ArrayList(texture.Texture).empty;
         var mesh_prim_progress: std.Progress.Node = progress_node.start("Processing mesh primitive sets", mesh.primitives_count);
         defer mesh_prim_progress.end();
         std.debug.print("Mesh has {d} primitive sets\n", .{mesh.primitives_count});
@@ -420,7 +421,7 @@ pub const MultiAsset = struct {
                 // on the index values in the 'indices' accessor, i.e., all index values
                 // must be less than attribute accessors' count.
                 // NOTE: Is an indexed primitive just a triangle/square?
-                try indices.ensureTotalCapacity(indices.items.len + idx.count); // Pre-allocate
+                try indices.ensureTotalCapacity(allocator, indices.items.len + idx.count); // Pre-allocate
                 // so we don't do many small allocations (bad syscalls! bad!!)
                 for (0..idx.count) |i|
                     indices.appendAssumeCapacity(@as(gl.uint, @intCast(idx.readIndex(i))));
@@ -487,7 +488,7 @@ pub const MultiAsset = struct {
                         },
                     }
                 }
-                try vertices.append(vertex);
+                try vertices.append(allocator, vertex);
                 mesh_attr_progress.setCompletedItems(i);
             }
 
@@ -499,7 +500,7 @@ pub const MultiAsset = struct {
                     // familiar diffuse and specular maps! Hooray
                     std.debug.print("Material is PBRspecularGlossiness\n", .{});
                     if (material.pbr_specular_glossiness.diffuse_texture.texture) |tex| {
-                        try textures.append(try self.loadTexture(tex, .diffuse, allocator));
+                        try textures.append(allocator, try self.loadTexture(tex, .diffuse, allocator));
                         std.debug.print("Material diffuse color is a texture\n", .{});
                     } else {
                         std.debug.print("material diffuse color is a factor\n", .{});
@@ -507,7 +508,7 @@ pub const MultiAsset = struct {
                         // TODO: Load and store!
                     }
                     if (material.pbr_specular_glossiness.specular_glossiness_texture.texture) |tex| {
-                        try textures.append(try self.loadTexture(tex, .specular, allocator));
+                        try textures.append(allocator, try self.loadTexture(tex, .specular, allocator));
                         std.debug.print("Material specular-glossiness is a texture\n", .{});
                     } else {
                         std.debug.print("material specular-glossiness are factors\n", .{});
@@ -521,7 +522,7 @@ pub const MultiAsset = struct {
                     // 0.0 and 1.0, or b) a texture.
                     std.debug.print("Material is PBRmetallicRoughness\n", .{});
                     if (material.pbr_metallic_roughness.base_color_texture.texture) |tex| {
-                        try textures.append(try self.loadTexture(tex, .base_color, allocator));
+                        try textures.append(allocator, try self.loadTexture(tex, .base_color, allocator));
                         std.debug.print("Material base color is a texture\n", .{});
                     } else {
                         std.debug.print("material base color is a factor\n", .{});
@@ -529,7 +530,7 @@ pub const MultiAsset = struct {
                         // TODO: Load and store!
                     }
                     if (material.pbr_metallic_roughness.metallic_roughness_texture.texture) |tex| {
-                        try textures.append(try self.loadTexture(tex, .metalic_roughness, allocator));
+                        try textures.append(allocator, try self.loadTexture(tex, .metalic_roughness, allocator));
                         std.debug.print("Material metalic roughness is a texture\n", .{});
                     } else {
                         std.debug.print("material metallic rougness are factors\n", .{});
@@ -544,9 +545,9 @@ pub const MultiAsset = struct {
         }
         std.debug.print("Initializing Mesh with {d} vertices...\n", .{vertices.items.len});
         return Mesh.init(
-            try indices.toOwnedSlice(),
-            try vertices.toOwnedSlice(),
-            try textures.toOwnedSlice(),
+            try indices.toOwnedSlice(allocator),
+            try vertices.toOwnedSlice(allocator),
+            try textures.toOwnedSlice(allocator),
         );
     }
 
@@ -573,11 +574,11 @@ pub const MultiAsset = struct {
 
                 std.debug.print("Loading texture from uri: {s}\n", .{image_uri});
                 const dir = std.fs.cwd().openDir(self.directory.?, .{}) catch |err| {
-                    log.err("failed to open directory: {?s}", .{self.directory.?});
+                    log.err("failed to open directory: {s}", .{self.directory.?});
                     return err;
                 };
                 const file = dir.openFile(std.mem.sliceTo(image_uri, 0), .{}) catch |err| {
-                    log.err("failed to open texture file: {?s}", .{image_uri});
+                    log.err("failed to open texture file: {s}", .{image_uri});
                     return err;
                 };
                 try texture_obj.loadFromFile(
@@ -764,7 +765,7 @@ pub const MultiAsset = struct {
         for (self.meshes.items) |mesh| {
             mesh.deinit(allocator);
         }
-        self.meshes.deinit();
+        self.meshes.deinit(allocator);
         if (self.loaded_textures) |*textures| {
             textures.deinit();
         }

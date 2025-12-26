@@ -1,5 +1,5 @@
 const std = @import("std");
-const glfw = @import("mach-glfw");
+const glfw = @import("zglfw");
 const gl = @import("gl");
 const zigimg = @import("zigimg");
 const zm = @import("zm");
@@ -11,8 +11,16 @@ const glfw_log = std.log.scoped(.glfw);
 const gl_log = std.log.scoped(.gl);
 const log = std.log;
 
-fn logGLFWError(error_code: glfw.ErrorCode, description: [:0]const u8) void {
-    glfw_log.err("{}: {s}\n", .{ error_code, description });
+fn logGLFWError(error_code: glfw.ErrorCode, description: ?[*:0]const u8) callconv(.c) void {
+    if (description) |s| {
+        glfw_log.err("{}: {s}\n", .{ error_code, s });
+    } else {
+        glfw_log.err("{}: <no description>\n", .{error_code});
+    }
+}
+
+fn getProcAddress(name: [*:0]const u8) callconv(.c) ?*align(4) const anyopaque {
+    return @as(?*align(4) const anyopaque, @alignCast(glfw.getProcAddress(name)));
 }
 
 pub const Material = struct {
@@ -95,7 +103,7 @@ pub const ShaderProgram = struct {
 
         // ================ Vertex shader ====================
         var file = cwd.openFile(vert_shader_pth, .{}) catch |err| {
-            log.err("failed to open vertex shader: {?s}", .{vert_shader_pth});
+            log.err("failed to open vertex shader: {s}", .{vert_shader_pth});
             return err;
         };
         // Ensure null termination (add a null byte at the end of the slice) by setting
@@ -104,10 +112,10 @@ pub const ShaderProgram = struct {
             allocator,
             1024 * 1e6,
             null,
-            @alignOf(u8),
+            std.mem.Alignment.of(u8),
             0,
         ) catch |err| {
-            log.err("failed to read vertex shader: {?s}", .{vert_shader_pth});
+            log.err("failed to read vertex shader: {s}", .{vert_shader_pth});
             return err;
         };
         defer allocator.free(shader_src);
@@ -125,13 +133,13 @@ pub const ShaderProgram = struct {
         const container: [*]const [*]const u8 = @ptrCast(&shader_src_ptr);
         gl.ShaderSource(vertex_shader, 1, container, null);
         gl.CompileShader(vertex_shader);
-        var success: c_int = undefined;
+        var success: [1]c_int = .{undefined};
         var info_log: [512:0]u8 = undefined;
         gl.GetShaderiv(vertex_shader, gl.COMPILE_STATUS, &success);
-        if (success != gl.TRUE) {
+        if (success[0] != gl.TRUE) {
             gl.GetShaderInfoLog(vertex_shader, info_log.len, null, &info_log);
             gl_log.err(
-                "failed to compile vertex shader '{s}': {?s}",
+                "failed to compile vertex shader '{s}': {s}",
                 .{ vert_shader_pth, std.mem.sliceTo(&info_log, 0) },
             );
             return error.CompileShaderFailed;
@@ -140,7 +148,7 @@ pub const ShaderProgram = struct {
         // ================ Fragment shader ==================
         file.close();
         file = cwd.openFile(frag_shader_pth, .{}) catch |err| {
-            log.err("failed to open fragment shader: {?s}", .{frag_shader_pth});
+            log.err("failed to open fragment shader: {s}", .{frag_shader_pth});
             return err;
         };
         defer file.close();
@@ -148,10 +156,10 @@ pub const ShaderProgram = struct {
             allocator,
             1024 * 1e6,
             null,
-            @alignOf(u8),
+            std.mem.Alignment.of(u8),
             0,
         ) catch |err| {
-            log.err("failed to read fragment shader: {?s}", .{frag_shader_pth});
+            log.err("failed to read fragment shader: {s}", .{frag_shader_pth});
             return err;
         };
         defer allocator.free(shader_src);
@@ -161,12 +169,12 @@ pub const ShaderProgram = struct {
         // Note that we can compile one shader from multiple sources, but here we do just 1.
         gl.ShaderSource(frag_shader, 1, @ptrCast(&shader_src.ptr), null);
         gl.CompileShader(frag_shader);
-        success = undefined;
+        success = .{undefined};
         info_log = undefined;
         gl.GetShaderiv(frag_shader, gl.COMPILE_STATUS, &success);
-        if (success != gl.TRUE) {
+        if (success[0] != gl.TRUE) {
             gl.GetShaderInfoLog(frag_shader, info_log.len, null, &info_log);
-            gl_log.err("failed to compile fragment shader '{s}': {?s}", .{ frag_shader_pth, std.mem.sliceTo(
+            gl_log.err("failed to compile fragment shader '{s}': {s}", .{ frag_shader_pth, std.mem.sliceTo(
                 &info_log,
                 0,
             ) });
@@ -185,12 +193,12 @@ pub const ShaderProgram = struct {
         gl.AttachShader(shader_program, vertex_shader);
         gl.AttachShader(shader_program, frag_shader);
         gl.LinkProgram(shader_program);
-        success = undefined;
+        success = .{undefined};
         gl.GetProgramiv(shader_program, gl.LINK_STATUS, &success);
-        if (success != gl.TRUE) {
+        if (success[0] != gl.TRUE) {
             info_log = undefined;
             gl.GetProgramInfoLog(shader_program, info_log.len, null, &info_log);
-            gl_log.err("failed to compile fragment shader: {?s}", .{std.mem.sliceTo(
+            gl_log.err("failed to compile fragment shader: {s}", .{std.mem.sliceTo(
                 &info_log,
                 0,
             )});
@@ -214,7 +222,7 @@ pub const ShaderProgram = struct {
     pub fn setBool(self: ShaderProgram, name: [*:0]const u8, value: bool) !void {
         const loc = gl.GetUniformLocation(self.id, name);
         if (loc == -1) {
-            gl_log.err("failed to find uniform: {?s}", .{name});
+            gl_log.err("failed to find uniform: {s}", .{name});
             return error.GetUniformLocationFailed;
         }
         gl.Uniform1ui(loc, @as(c_uint, @intFromBool(value)));
@@ -223,7 +231,7 @@ pub const ShaderProgram = struct {
     pub fn setInt(self: ShaderProgram, name: [*:0]const u8, value: i32) !void {
         const loc = gl.GetUniformLocation(self.id, name);
         if (loc == -1) {
-            gl_log.err("failed to find uniform: {?s}", .{name});
+            gl_log.err("failed to find uniform: {s}", .{name});
             return error.GetUniformLocationFailed;
         }
         gl.Uniform1i(loc, value);
@@ -232,7 +240,7 @@ pub const ShaderProgram = struct {
     pub fn setFloat(self: ShaderProgram, name: [*:0]const u8, value: f32) !void {
         const loc = gl.GetUniformLocation(self.id, name);
         if (loc == -1) {
-            gl_log.err("failed to find uniform: {?s}", .{name});
+            gl_log.err("failed to find uniform: {s}", .{name});
             return error.GetUniformLocationFailed;
         }
         gl.Uniform1f(loc, value);
@@ -241,16 +249,16 @@ pub const ShaderProgram = struct {
     pub fn setVec3f(self: ShaderProgram, name: [*:0]const u8, value: zm.Vec3f) !void {
         const loc = gl.GetUniformLocation(self.id, name);
         if (loc == -1) {
-            gl_log.err("failed to find uniform: {?s}", .{name});
+            gl_log.err("failed to find uniform: {s}", .{name});
             return error.GetUniformLocationFailed;
         }
-        gl.Uniform3f(loc, value[0], value[1], value[2]);
+        gl.Uniform3f(loc, value.data[0], value.data[1], value.data[2]);
     }
 
     pub fn setMat4f(self: ShaderProgram, name: [*:0]const u8, value: zm.Mat4f, transpose: bool) !void {
         const loc = gl.GetUniformLocation(self.id, name);
         if (loc == -1) {
-            gl_log.err("failed to find uniform: {?s}", .{name});
+            gl_log.err("failed to find uniform: {s}", .{name});
             return error.GetUniformLocationFailed;
         }
         gl.UniformMatrix4fv(loc, 1, @intFromBool(transpose), @ptrCast(&(value)));
@@ -335,7 +343,7 @@ pub const ContextOptions = struct {
 };
 
 pub const Context = struct {
-    window: glfw.Window,
+    window: *glfw.Window,
     progress_node: std.Progress.Node,
     options: ContextOptions,
     splash_texture: texture.Texture,
@@ -346,30 +354,28 @@ pub const Context = struct {
 
     pub fn init(allocator: std.mem.Allocator, options: ContextOptions) !Context {
         // Create an OpenGL context using a windowing system of your choice.
-        glfw.setErrorCallback(logGLFWError);
-        if (!glfw.init(.{})) {
-            glfw_log.err("failed to initialize GLFW: {?s}", .{glfw.getErrorString()});
-            return error.GLFWInitFailed;
-        }
+        _ = glfw.setErrorCallback(logGLFWError);
+        try glfw.init();
 
-        const window = glfw.Window.create(options.width, options.height, "Gunter Engine", null, null, .{
-            .context_version_major = gl.info.version_major,
-            .context_version_minor = gl.info.version_minor,
-            .opengl_profile = .opengl_core_profile,
-            .opengl_forward_compat = true,
-        }) orelse {
-            glfw_log.err("failed to create GLFW window: {?s}", .{glfw.getErrorString()});
-            return error.CreateWindowFailed;
-        };
+        glfw.windowHint(.context_version_major, gl.info.version_major);
+        glfw.windowHint(.context_version_minor, gl.info.version_minor);
+        glfw.windowHint(.opengl_profile, .opengl_core_profile);
+        glfw.windowHint(.opengl_forward_compat, true);
+        const window = try glfw.Window.create(
+            options.width,
+            options.height,
+            "Gunter Engine",
+            null,
+        );
         // Make the window's context current
         glfw.makeContextCurrent(window);
         if (options.enable_vsync) glfw.swapInterval(1);
 
         // Initialize the procedure table. This is a table where all OpenGL function
         // implementations are stored, because the implementations vary between drivers.
-        const gl_procs = try allocator.create(gl.ProcTable);
+        const gl_procs: *gl.ProcTable = try allocator.create(gl.ProcTable);
         errdefer allocator.destroy(gl_procs); // Cleanup if anything below fails
-        if (!gl_procs.init(glfw.getProcAddress)) {
+        if (!gl_procs.init(getProcAddress)) {
             gl_log.err("failed to initialize OpenGL procedure table", .{});
             return error.GLInitFailed;
         }
@@ -405,13 +411,13 @@ pub const Context = struct {
         };
     }
 
-    fn getMonitorWidth(self: Context) ?u32 {
+    fn getMonitorWidth(self: Context) ?i32 {
         _ = self;
-        var monitor_width: ?u32 = undefined;
+        var monitor_width: ?i32 = undefined;
         if (glfw.Monitor.getPrimary()) |monitor| {
             if (monitor.getVideoMode()) |mode| {
-                monitor_width = mode.getWidth();
-            } else {
+                monitor_width = mode.width;
+            } else |_| {
                 glfw_log.err("Could not get the video mode object\n", .{});
             }
         } else {
@@ -420,13 +426,13 @@ pub const Context = struct {
         return monitor_width;
     }
 
-    fn getMonitorHeight(self: Context) ?u32 {
+    fn getMonitorHeight(self: Context) ?i32 {
         _ = self;
-        var monitor_height: ?u32 = undefined;
+        var monitor_height: ?i32 = undefined;
         if (glfw.Monitor.getPrimary()) |monitor| {
             if (monitor.getVideoMode()) |mode| {
-                monitor_height = mode.getHeight();
-            } else {
+                monitor_height = mode.height;
+            } else |_| {
                 glfw_log.err("Could not get the video mode object\n", .{});
             }
         } else {
@@ -437,23 +443,23 @@ pub const Context = struct {
     pub fn splashScreen(self: Context) !void {
         const width = 400;
         const height = 400;
-        const monitor_width: u32 = self.getMonitorWidth() orelse 1920;
-        const monitor_height: u32 = self.getMonitorHeight() orelse 1080;
-        self.window.setPos(.{
-            .x = @as(u32, @intCast(@divFloor(monitor_width, 2) - @divFloor(width, 2))),
-            .y = @as(u32, @intCast(@divFloor(monitor_height, 2) - @divFloor(height, 2))),
-        });
-        self.window.setAttrib(.decorated, false);
-        self.window.setAttrib(.floating, true);
-        self.window.setAttrib(.resizable, false);
-        self.window.setAttrib(.auto_iconify, true);
+        const monitor_width: i32 = self.getMonitorWidth() orelse 1920;
+        const monitor_height: i32 = self.getMonitorHeight() orelse 1080;
+        self.window.setPos(
+            @divFloor(monitor_width, 2) - @divFloor(width, 2),
+            @divFloor(monitor_height, 2) - @divFloor(height, 2),
+        );
+        self.window.setAttribute(.decorated, false);
+        self.window.setAttribute(.floating, true);
+        self.window.setAttribute(.resizable, false);
+        self.window.setAttribute(.auto_iconify, true);
 
         self.splash_shader_program.use();
         var quad = asset.Primitive.makePlaneMesh();
         self.splash_texture.bind(0);
         try self.splash_shader_program.setInt("u_texture", 0);
 
-        self.window.setSize(.{ .width = 400, .height = 400 });
+        self.window.setSize(400, 400);
         gl.ClearColor(0.0, 0.0, 0.0, 1);
         try quad.draw(self.splash_shader_program, .{
             .use_textures = false,
@@ -464,33 +470,33 @@ pub const Context = struct {
         // callbacks.
     }
 
-    pub fn ready(self: Context) void {
+    pub fn ready(self: Context) !void {
         self.splash_texture.deinit();
         self.splash_shader_program.delete();
         // glfw.defaultWindowHints();
-        self.window.setAttrib(.decorated, true);
-        self.window.setAttrib(.floating, false);
-        self.window.setAttrib(.resizable, false);
+        self.window.setAttribute(.decorated, true);
+        self.window.setAttribute(.floating, false);
+        self.window.setAttribute(.resizable, false);
 
-        const monitor_width: u32 = self.getMonitorWidth() orelse 1920;
-        const monitor_height: u32 = self.getMonitorHeight() orelse 1080;
-        var x_offset: u32 = 0;
-        var y_offset: u32 = 0;
+        const monitor_width: i32 = self.getMonitorWidth() orelse 1920;
+        const monitor_height: i32 = self.getMonitorHeight() orelse 1080;
+        var x_offset: i32 = 0;
+        var y_offset: i32 = 0;
         if (self.options.width < monitor_width) {
-            x_offset = @as(u32, @intCast(@divFloor(monitor_width, 2) - @divFloor(self.options.width, 2)));
+            x_offset = @divFloor(monitor_width, 2) - @divFloor(self.options.width, 2);
         }
         if (self.options.height < monitor_height) {
-            y_offset = @as(u32, @intCast(@divFloor(monitor_height, 2) - @divFloor(self.options.height, 2)));
+            y_offset = @divFloor(monitor_height, 2) - @divFloor(self.options.height, 2);
         }
-        self.window.setPos(.{ .x = x_offset, .y = y_offset });
-        self.window.setSize(.{ .width = self.options.width, .height = self.options.height });
+        self.window.setPos(x_offset, y_offset);
+        self.window.setSize(self.options.width, self.options.height);
         gl.Viewport(0, 0, self.options.width, self.options.height);
         if (self.options.enable_depth_testing) gl.Enable(gl.DEPTH_TEST);
         if (self.options.enable_blending) {
             gl.Enable(gl.BLEND);
             gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
         }
-        if (self.options.grab_mouse) self.window.setInputModeCursor(.disabled);
+        if (self.options.grab_mouse) try self.window.setInputMode(.cursor, .disabled);
         gl.ActiveTexture(gl.TEXTURE0); // Reset for good measures!
     }
 

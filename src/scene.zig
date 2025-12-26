@@ -22,8 +22,8 @@ pub const Camera = struct {
     last_mouse_x: f64 = 0,
     last_mouse_y: f64 = 0,
     first_mouse_enter: bool = true,
-    up: zm.Vec3f = zm.vec.up(f32),
-    front: zm.Vec3f = -zm.vec.forward(f32),
+    up: zm.Vec3f = zm.Vec3f{ .data = .{ 0.0, 1.0, 0.0 } },
+    front: zm.Vec3f = zm.Vec3f{ .data = .{ 0.0, 0.0, -1.0 } },
     strife_speed: f32 = 25,
     ticker: *core.Ticker,
     projection_mat: zm.Mat4f,
@@ -31,13 +31,13 @@ pub const Camera = struct {
     pub fn init(ticker: *core.Ticker, translation: ?zm.Vec3f, fov: f32, screen_w: i32, screen_h: i32, near: ?f32, far: ?f32) Camera {
         return Camera{
             .ticker = ticker,
-            .translation = translation orelse zm.vec.zero(3, f32),
+            .translation = translation orelse zm.Vec3f.zero(),
             .fov = fov,
             .screen_w = screen_w,
             .screen_h = screen_h,
             .near = near orelse 0.1,
             .far = far orelse 100.0,
-            .projection_mat = zm.Mat4f.perspective(
+            .projection_mat = zm.Mat4f.perspectiveRH(
                 fov,
                 @as(f32, @floatFromInt(screen_w)) / @as(f32, @floatFromInt(screen_h)),
                 near orelse 0.1,
@@ -68,39 +68,41 @@ pub const Camera = struct {
     }
 
     pub fn moveFwd(self: *Camera) void {
-        self.translation += zm.vec.scale(
-            self.front,
+        self.translation.addAssign(self.front.scale(
             self.strife_speed * @as(f32, @floatCast(
                 self.ticker.deltaSeconds(),
             )),
-        );
+        ));
     }
 
     pub fn moveBck(self: *Camera) void {
-        self.translation -= zm.vec.scale(
-            self.front,
+        self.translation.subAssign(self.front.scale(
             self.strife_speed * @as(f32, @floatCast(
                 self.ticker.deltaSeconds(),
             )),
-        );
+        ));
     }
 
     pub fn moveLeft(self: *Camera) void {
-        self.translation -= zm.vec.scale(
-            zm.vec.normalize(zm.vec.cross(self.front, self.up)),
+        self.translation.subAssign(zm.Vec3f.crossRH(
+            self.front,
+            self.up,
+        ).norm().scale(
             self.strife_speed * @as(f32, @floatCast(
                 self.ticker.deltaSeconds(),
             )),
-        );
+        ));
     }
 
     pub fn moveRight(self: *Camera) void {
-        self.translation += zm.vec.scale(
-            zm.vec.normalize(zm.vec.cross(self.front, self.up)),
+        self.translation.addAssign(zm.Vec3f.crossRH(
+            self.front,
+            self.up,
+        ).norm().scale(
             self.strife_speed * @as(f32, @floatCast(
                 self.ticker.deltaSeconds(),
             )),
-        );
+        ));
     }
 
     pub fn getViewMat(self: *Camera) zm.Mat4f {
@@ -112,19 +114,27 @@ pub const Camera = struct {
         // (x, z) plane: camera_front.x = cos(yaw_angle) * hypothenus
         // (x, y) plane: camera_front.x = cos(pitch_angle) * hypothenus
         // Combined: camera_front.x = cos(yaw) * cos(pitch).
-        self.front = zm.vec.normalize(zm.Vec3f{
-            std.math.cos(std.math.degreesToRadians(self.yaw)) * std.math.cos(std.math.degreesToRadians(self.pitch)),
+        self.front = zm.Vec3f.norm(zm.Vec3f{ .data = .{
+            std.math.cos(std.math.degreesToRadians(self.yaw)) * std.math.cos(
+                std.math.degreesToRadians(self.pitch),
+            ),
             std.math.sin(std.math.degreesToRadians(self.pitch)),
-            std.math.sin(std.math.degreesToRadians(self.yaw)) * std.math.cos(std.math.degreesToRadians(self.pitch)),
-        });
+            std.math.sin(std.math.degreesToRadians(self.yaw)) * std.math.cos(
+                std.math.degreesToRadians(self.pitch),
+            ),
+        } });
 
-        return zm.Mat4f.lookAt(self.translation, self.translation + self.front, self.up);
+        return zm.Mat4f.lookAtRH(
+            self.translation,
+            self.translation.add(self.front),
+            self.up,
+        );
     }
 
     pub fn getSkyboxViewMat(self: *Camera) zm.Mat4f {
         // const view_mat = self.getViewMat(); would be ideal!
         const translation = self.translation;
-        self.translation = zm.vec.zero(3, f16);
+        self.translation = zm.Vec3f.zero();
         const view_mat = self.getViewMat();
         self.translation = translation;
         return view_mat;
@@ -205,7 +215,7 @@ pub const SkyBox = struct {
         gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 3 * @sizeOf(gl.float), 0);
         gl.EnableVertexAttribArray(0);
         const skybox_dir = std.fs.cwd().openDir(directory, .{}) catch |err| {
-            log.err("failed to open skybox directory: {?s}", .{directory});
+            log.err("failed to open skybox directory: {s}", .{directory});
             return err;
         };
         const file_names: []const []const u8 = &.{
@@ -220,7 +230,7 @@ pub const SkyBox = struct {
         var file: std.fs.File = undefined;
         for (file_names, 0..) |file_name, i| {
             file = skybox_dir.openFile(file_name, .{}) catch |err| {
-                log.err("failed to open skybox file: {?s}", .{file_name});
+                log.err("failed to open skybox file: {s}", .{file_name});
                 return err;
             };
             try texture_obj.loadCubeMapFromFile(
