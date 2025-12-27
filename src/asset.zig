@@ -621,25 +621,18 @@ pub const MultiAsset = struct {
                 .{basisu_img.name orelse "noname"},
             );
             return error.NotImplementedError;
-        } else if (gltf_texture.extensions_count > 0) {
-            for (gltf_texture.extensions.?[0..gltf_texture.extensions_count]) |ext| {
-                std.debug.print("Texture has extension: {?s}\n", .{ext.name});
-                if (ext.name) |name| {
-                    if (std.mem.eql(u8, std.mem.sliceTo(name, 0), "EXT_texture_webp")) {
-                        std.debug.print("Loading WEBP texture extension\n", .{});
-                        // WARN: This requires upgrading cgltf in zmesh. I tried but
-                        // unfortunately I couldn't figure it out just yet. Need to dig
-                        // deeper.
-                        return error.NotImplementedError;
-                    } else if (std.mem.eql(u8, std.mem.sliceTo(name, 0), "KHR_texture_basisu")) {
-                        std.debug.print("Loading KHR basis universal texture extension\n", .{});
-                        return error.NotImplementedError;
-                    }
-                } else {
-                    log.err("texture extension has no name\n", .{});
-                    return error.InvalidTextureExtension;
-                }
-            }
+        } else if (gltf_texture.webp_image) |webp_img| {
+            std.debug.print(
+                "Loading webp image texture: {s}\n",
+                .{webp_img.name orelse "noname"},
+            );
+            texture_obj = self.loadImageTexture(webp_img, texture_type, allocator) catch |err| {
+                log.err(
+                    "failed to load image texture: {s}",
+                    .{gltf_texture.image.?.name orelse "noname"},
+                );
+                return err;
+            };
         } else {
             log.err(
                 "no image or extension provided for texture: {s}",
@@ -686,22 +679,11 @@ pub const MultiAsset = struct {
         } else if (texture_img.buffer_view) |buffer_view| {
             std.debug.print("Loading texture from buffer view\n", .{});
             std.debug.print("Loading {d} bytes\n", .{buffer_view.size});
+            // TODO: https://github.khronos.org/glTF-Tutorials/gltfTutorial/gltfTutorial_005_BuffersBufferViewsAccessors.html
             return error.NotImplementedError;
             // const image_data: ?[*]u8 = buffer_view.getData();
-            // gl.BindTexture(gl.TEXTURE_2D, tbo[0]);
-            // gl.TexImage2D(
-            //     gl.TEXTURE_2D,
-            //     0,
-            //     gl.RGB,
-            //     @as(c_int, @intCast(image.width)),
-            //     @as(c_int, @intCast(image.height)),
-            //     0,
-            //     if (image.pixelFormat().isRgba()) gl.RGBA else gl.RGB,
-            //     gl.UNSIGNED_BYTE,
-            //     image_data,
-            // );
-            // if (generate_mipmap)
-            //     gl.GenerateMipmap(gl.TEXTURE_2D);
+            // texture_obj = texture.Texture.init(texture_type, true);
+            // texture_obj.fillFromBuffer(image_data);
         } else if (texture_img.extras.data) |image_data| {
             std.debug.print("Loading texture from data\n", .{});
             _ = image_data;
