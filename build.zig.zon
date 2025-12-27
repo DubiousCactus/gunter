@@ -53,7 +53,7 @@
             .hash = "zglfw-0.10.0-dev-zgVDNHO2IQDy_fSdwY5U4z42rHUuKgt7T9f-qmQ3FnuL",
         },
         .zm = .{
-            .url = "https://github.com/DubiousCactus/zm/archive/refs/heads/matmul_fix.zip",
+            .url = "git+https://github.com/griush/zm#8ae7b0cda11585364a7f457e20bca42df5e4405c",
             .hash = "zm-0.5.0-cLX-WQbYAAAXCDDEGeBhQGq_u60nwNf7RoSDm4xKZtiz",
         },
     },
