@@ -303,7 +303,11 @@ pub const MultiAsset = struct {
         return multi_asset;
     }
 
-    fn loadEntireScene(self: *MultiAsset, data: *zmesh.io.zcgltf.Data, allocator: std.mem.Allocator) !void {
+    fn loadEntireScene(
+        self: *MultiAsset,
+        data: *zmesh.io.zcgltf.Data,
+        allocator: std.mem.Allocator,
+    ) !void {
         std.debug.print("\t[*]Parsing the scene...\n", .{});
         var scene_progress = self.root_progress_node.?.start("Parsing the scene", 0);
         defer scene_progress.end();
@@ -323,7 +327,11 @@ pub const MultiAsset = struct {
         }
     }
 
-    fn loadRootMesh(self: *MultiAsset, data: *zmesh.io.zcgltf.Data, allocator: std.mem.Allocator) !void {
+    fn loadRootMesh(
+        self: *MultiAsset,
+        data: *zmesh.io.zcgltf.Data,
+        allocator: std.mem.Allocator,
+    ) !void {
         var mesh_indices = std.ArrayList(u32).empty;
         var mesh_positions = std.ArrayList([3]f32).empty;
         var mesh_normals = std.ArrayList([3]f32).empty;
@@ -396,7 +404,10 @@ pub const MultiAsset = struct {
         var vertices = std.ArrayList(Vertex).empty;
         var indices = std.ArrayList(gl.uint).empty;
         var textures = std.ArrayList(texture.Texture).empty;
-        var mesh_prim_progress: std.Progress.Node = progress_node.start("Processing mesh primitive sets", mesh.primitives_count);
+        var mesh_prim_progress: std.Progress.Node = progress_node.start(
+            "Processing mesh primitive sets",
+            mesh.primitives_count,
+        );
         defer mesh_prim_progress.end();
         std.debug.print("Mesh has {d} primitive sets\n", .{mesh.primitives_count});
         // NOTE: It seems that a mesh having just one primitive is normal, and we could
@@ -414,7 +425,10 @@ pub const MultiAsset = struct {
             defer mesh_attr_progress.end();
             std.debug.print("Primitive has {d} attribute types\n", .{primitive.attributes_count});
             if (primitive.indices) |idx| {
-                std.debug.print("Primitive has {d} indices of type 'uint'. Loading...\n", .{idx.count});
+                std.debug.print(
+                    "Primitive has {d} indices of type 'uint'. Loading...\n",
+                    .{idx.count},
+                );
                 // INFO: When indices is set, the primitive is "indexed", meaning its
                 // attributes data are accessed via an "accessor" using the attribute's
                 // index. The value of 'indices' indicates the upper (exclusive) bound
@@ -444,7 +458,10 @@ pub const MultiAsset = struct {
                 .texture_coords = undefined,
             };
             for (attribute_types) |attr|
-                std.debug.print("Attribute has {d} elements of type '{s}'. Loading...\n", .{ attr.data.count, attr.name orelse "NONE" });
+                std.debug.print(
+                    "Attribute has {d} elements of type '{s}'. Loading...\n",
+                    .{ attr.data.count, attr.name orelse "NONE" },
+                );
             mesh_attr_progress.increaseEstimatedTotalItems(attribute_types[0].data.count);
             for (0..attribute_types[0].data.count) |i| {
                 vertex = Vertex{
@@ -484,7 +501,10 @@ pub const MultiAsset = struct {
                             // log.err("weights attributes not implemented.", .{});
                         },
                         else => {
-                            log.err("can't handle this type of attribute: {s}\n", .{attr.name orelse "empty"});
+                            log.err(
+                                "can't handle this type of attribute: {s}\n",
+                                .{attr.name orelse "empty"},
+                            );
                         },
                     }
                 }
@@ -493,14 +513,20 @@ pub const MultiAsset = struct {
             }
 
             if (primitive.material) |material| {
-                var material_progress: std.Progress.Node = mesh_attr_progress.start("Processing material", 0);
+                var material_progress: std.Progress.Node = mesh_attr_progress.start(
+                    "Processing material",
+                    0,
+                );
                 defer material_progress.end();
                 if (material.has_pbr_specular_glossiness == 1) {
                     // INFO: It seems to also support PBR specular-glossiness with our
                     // familiar diffuse and specular maps! Hooray
                     std.debug.print("Material is PBRspecularGlossiness\n", .{});
                     if (material.pbr_specular_glossiness.diffuse_texture.texture) |tex| {
-                        try textures.append(allocator, try self.loadTexture(tex, .diffuse, allocator));
+                        try textures.append(
+                            allocator,
+                            try self.loadTexture(tex, .diffuse, allocator),
+                        );
                         std.debug.print("Material diffuse color is a texture\n", .{});
                     } else {
                         std.debug.print("material diffuse color is a factor\n", .{});
@@ -508,7 +534,10 @@ pub const MultiAsset = struct {
                         // TODO: Load and store!
                     }
                     if (material.pbr_specular_glossiness.specular_glossiness_texture.texture) |tex| {
-                        try textures.append(allocator, try self.loadTexture(tex, .specular, allocator));
+                        try textures.append(
+                            allocator,
+                            try self.loadTexture(tex, .specular, allocator),
+                        );
                         std.debug.print("Material specular-glossiness is a texture\n", .{});
                     } else {
                         std.debug.print("material specular-glossiness are factors\n", .{});
@@ -522,16 +551,27 @@ pub const MultiAsset = struct {
                     // 0.0 and 1.0, or b) a texture.
                     std.debug.print("Material is PBRmetallicRoughness\n", .{});
                     if (material.pbr_metallic_roughness.base_color_texture.texture) |tex| {
-                        try textures.append(allocator, try self.loadTexture(tex, .base_color, allocator));
-                        std.debug.print("Material base color is a texture\n", .{});
+                        std.debug.print("Material base color is a texture: {?s}\n", .{tex.name});
+                        try textures.append(allocator, try self.loadTexture(
+                            tex,
+                            .base_color,
+                            allocator,
+                        ));
                     } else {
                         std.debug.print("material base color is a factor\n", .{});
                         std.debug.print("FACTORS NOT IMPLEMENTED!!!!\n", .{});
                         // TODO: Load and store!
                     }
                     if (material.pbr_metallic_roughness.metallic_roughness_texture.texture) |tex| {
-                        try textures.append(allocator, try self.loadTexture(tex, .metalic_roughness, allocator));
-                        std.debug.print("Material metalic roughness is a texture\n", .{});
+                        try textures.append(allocator, try self.loadTexture(
+                            tex,
+                            .metalic_roughness,
+                            allocator,
+                        ));
+                        std.debug.print(
+                            "Material metalic roughness is a texture: {?s}\n",
+                            .{tex.name},
+                        );
                     } else {
                         std.debug.print("material metallic rougness are factors\n", .{});
                         std.debug.print("FACTORS NOT IMPLEMENTED!!!!\n", .{});
@@ -558,14 +598,68 @@ pub const MultiAsset = struct {
         allocator: std.mem.Allocator,
     ) !texture.Texture {
         // INFO: A texture has an "image" source and a "sampler".
-        if (gltf_texture.image == null) {
-            log.err("No image provided for texture", .{});
+        // if (gltf_texture.image == null) {
+        //     log.err("No image provided for texture", .{});
+        //     return texture.TextureError.NoImageProvided;
+        // }
+        std.debug.print("Loading texture '{s}' of type {}...\n", .{
+            gltf_texture.name orelse "noname",
+            texture_type,
+        });
+        var texture_obj: texture.Texture = undefined;
+        if (gltf_texture.image) |image_tex| {
+            texture_obj = self.loadImageTexture(image_tex, texture_type, allocator) catch |err| {
+                log.err(
+                    "failed to load image texture: {s}",
+                    .{gltf_texture.image.?.name orelse "noname"},
+                );
+                return err;
+            };
+        } else if (gltf_texture.basisu_image) |basisu_img| {
+            std.debug.print(
+                "Loading basisu image texture: {s}\n",
+                .{basisu_img.name orelse "noname"},
+            );
+            return error.NotImplementedError;
+        } else if (gltf_texture.extensions_count > 0) {
+            for (gltf_texture.extensions.?[0..gltf_texture.extensions_count]) |ext| {
+                std.debug.print("Texture has extension: {?s}\n", .{ext.name});
+                if (ext.name) |name| {
+                    if (std.mem.eql(u8, std.mem.sliceTo(name, 0), "EXT_texture_webp")) {
+                        std.debug.print("Loading WEBP texture extension\n", .{});
+                        // WARN: This requires upgrading cgltf in zmesh. I tried but
+                        // unfortunately I couldn't figure it out just yet. Need to dig
+                        // deeper.
+                        return error.NotImplementedError;
+                    } else if (std.mem.eql(u8, std.mem.sliceTo(name, 0), "KHR_texture_basisu")) {
+                        std.debug.print("Loading KHR basis universal texture extension\n", .{});
+                        return error.NotImplementedError;
+                    }
+                } else {
+                    log.err("texture extension has no name\n", .{});
+                    return error.InvalidTextureExtension;
+                }
+            }
+        } else {
+            log.err(
+                "no image or extension provided for texture: {s}",
+                .{gltf_texture.name orelse "noname"},
+            );
             return texture.TextureError.NoImageProvided;
         }
-        std.debug.print("Loading texture '{s}' of type {}...\n", .{ gltf_texture.image.?.name orelse "noname", texture_type });
+
+        return texture_obj;
+    }
+
+    fn loadImageTexture(
+        self: *MultiAsset,
+        texture_img: *zmesh.io.zcgltf.Image,
+        texture_type: texture.TextureType,
+        allocator: std.mem.Allocator,
+    ) !texture.Texture {
         var texture_obj: texture.Texture = undefined;
         errdefer texture_obj.deinit();
-        if (gltf_texture.image.?.uri) |image_uri| {
+        if (texture_img.uri) |image_uri| {
             if (self.loaded_textures.?.get(std.mem.sliceTo(image_uri, 0))) |cached_texture| {
                 texture_obj = cached_texture;
                 std.debug.print("Using cache for '{s}\n", .{image_uri});
@@ -589,7 +683,7 @@ pub const MultiAsset = struct {
 
                 try self.loaded_textures.?.put(std.mem.sliceTo(image_uri, 0), texture_obj);
             }
-        } else if (gltf_texture.image.?.buffer_view) |buffer_view| {
+        } else if (texture_img.buffer_view) |buffer_view| {
             std.debug.print("Loading texture from buffer view\n", .{});
             std.debug.print("Loading {d} bytes\n", .{buffer_view.size});
             return error.NotImplementedError;
@@ -608,7 +702,7 @@ pub const MultiAsset = struct {
             // );
             // if (generate_mipmap)
             //     gl.GenerateMipmap(gl.TEXTURE_2D);
-        } else if (gltf_texture.image.?.extras.data) |image_data| {
+        } else if (texture_img.extras.data) |image_data| {
             std.debug.print("Loading texture from data\n", .{});
             _ = image_data;
             return error.NotImplementedError;
